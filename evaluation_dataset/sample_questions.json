@@ -1,0 +1,12 @@
+[
+  {
+    "question": "What is the main obligation described in Article 5?",
+    "task": "legal_qa",
+    "expected_topics": ["article 5", "obligation"]
+  },
+  {
+    "question": "Does the regulation mention reporting deadlines?",
+    "task": "legal_qa",
+    "expected_topics": ["reporting", "deadline"]
+  }
+]
