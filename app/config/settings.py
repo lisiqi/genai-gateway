@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openai_model: str = "gpt-4.1-mini"
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/genai_gateway"
+    database_echo: bool = False
     prompt_root: str = "prompts"
     default_task: str = "legal_qa"
     default_prompt_version: str = "v1"

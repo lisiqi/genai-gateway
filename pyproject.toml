@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "genai-gateway"
+version = "0.1.0"
+description = "Gateway-first GenAI platform scaffold with legal RAG as the example app."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.116.0",
+  "uvicorn[standard]>=0.35.0",
+  "pydantic>=2.11.0",
+  "pydantic-settings>=2.10.0",
+  "sqlalchemy>=2.0.0",
+  "psycopg[binary]>=3.2.0",
+  "pgvector>=0.4.0",
+  "alembic>=1.16.0",
+  "openai>=2.20.0",
+  "python-dotenv>=1.1.0",
+  "streamlit>=1.49.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.4.0",
+  "ruff>=0.12.0",
+]
+
+[tool.setuptools]
+packages = []

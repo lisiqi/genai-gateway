@@ -1,378 +1,55 @@
-GenAI Gateway for Enterprise Applications
-
-A reusable LLM gateway with routing, prompt versioning, evaluation, and observability.
-
-⸻
-
-1. Project Definition
-
-This project implements a reusable GenAI gateway that separates the application layer from LLM operations.
-
-Instead of letting each application directly call an LLM provider, the gateway provides a controlled interface that handles:
-	•	model routing
-	•	prompt versioning
-	•	retrieval orchestration
-	•	logging and observability
-	•	evaluation and comparison
-
-The goal is to simulate how enterprises manage and operate LLM-powered applications in production environments.
-
-The gateway enables multiple AI applications (e.g., Q&A assistants, summarizers, classification tools) to share a consistent and controlled GenAI infrastructure layer.
-
-⸻
-
-2. Primary Use Case
-
-Legal Document Question Answering
-
-The system answers questions based on publicly available legal documents such as:
-	•	EU regulations
-	•	court rulings
-	•	policy reports
-
-Why legal documents:
-	•	long structured text
-	•	strong requirement for grounded answers
-	•	retrieval quality matters
-	•	hallucination detection is meaningful
-
-This use case allows the system to demonstrate:
-	•	RAG architecture
-	•	groundedness evaluation
-	•	prompt experimentation
-	•	model comparison
-
-⸻
-
-3. System Architecture
-
-Client Applications
- └ Legal Q&A assistant
-            │
-            ▼
-       GenAI Gateway
-  ├ request schema validation
-  ├ prompt template registry
-  ├ prompt versioning
-  ├ model router
-  ├ retrieval orchestration
-  ├ caching
-  ├ logging / tracing
-  └ evaluation hooks
-            │
-            ▼
-      Retrieval Layer
-  ├ document chunking
-  ├ embedding service
-  ├ vector search
-  └ context assembly
-            │
-            ▼
-       Model Backends
-  ├ OpenAI / Azure OpenAI
-  └ optional open-source model
-            │
-            ▼
- Evaluation + Observability
-  ├ groundedness scoring
-  ├ hallucination checks
-  ├ latency metrics
-  ├ token cost tracking
-  └ prompt version comparison
-
-
-⸻
-
-4. MVP Scope
-
-The MVP focuses on a single end-to-end RAG pipeline with a reusable gateway interface.
-
-Included in MVP
-
-Document ingestion
-	•	legal documents loading
-	•	text chunking
-	•	embeddings generation
-	•	vector storage
+# GenAI Gateway
 
-Gateway API
-	•	/query endpoint
-	•	request schema validation
-	•	prompt template loading
-	•	prompt versioning
-	•	model routing
+A reusable LLM gateway focused on prompt versioning, routing, request logging, and evaluation.
 
-Retrieval
-	•	semantic vector search
-	•	context assembly
+The main product in this repo is the gateway layer. The example application used to exercise it is a production legal document RAG system.
 
-LLM interaction
-	•	model invocation
-	•	response generation
+## Purpose
 
-Logging
+Most GenAI demos couple application logic directly to a model provider. This project takes the opposite approach:
 
-store:
-	•	prompt version
-	•	retrieved chunks
-	•	response
-	•	latency
-	•	token usage
+- applications call a gateway, not a model SDK directly
+- the gateway owns prompt selection and versioning
+- retrieval is orchestrated behind a stable interface
+- request metadata is logged centrally
+- evaluation is part of the request lifecycle, not an afterthought
 
-Evaluation
-	•	groundedness scoring
-	•	latency metrics
-	•	token cost tracking
+The goal is to model a production-style GenAI platform boundary, even though the first concrete use case is a single legal Q&A app.
 
-Dashboard
+## Example Application
 
-Streamlit dashboard showing:
-	•	query logs
-	•	prompt versions
-	•	evaluation metrics
+The initial example app is `legal_qa`.
 
-⸻
+It answers questions grounded in legal and policy documents such as:
 
-Out of Scope (for now)
+- EU regulations
+- court rulings
+- policy reports
 
-To keep the project focused, the following are not part of the MVP:
-	•	authentication
-	•	multi-user access
-	•	advanced safety filters
-	•	rate limiting
-	•	async task queues
-	•	complex admin interfaces
+This is a good first application because it stresses the parts of the platform that matter:
 
-These can be future extensions.
+- retrieval quality
+- grounded answers
+- prompt comparison
+- latency and token cost tracking
 
-⸻
+## What The Gateway Owns
 
-5. Request Lifecycle
+The gateway is responsible for:
 
-A single query flows through the system as follows:
-	1.	Client sends request to gateway
+- request schema validation
+- prompt registry and version selection
+- model routing
+- retrieval orchestration
+- response generation
+- request logging
+- evaluation hooks
 
-POST /query
-{
-  "question": "...",
-  "task": "legal_qa"
-}
+The legal document RAG flow is only one consumer of that gateway design. Later, the same gateway should be able to support summarization, classification, and other AI tasks.
 
-	2.	Gateway validates request schema
-	3.	Gateway selects prompt template + version
-	4.	Gateway triggers retrieval
+## Use Case System Diagram
 
-	•	embedding of query
-	•	vector search
-	•	retrieve top-k chunks
-
-	5.	Gateway assembles prompt
-
-system prompt
-+
-retrieved context
-+
-user question
-
-	6.	Gateway selects model backend
-	7.	Model generates response
-	8.	Gateway logs metadata
-
-	•	prompt version
-	•	retrieved documents
-	•	latency
-	•	token usage
-
-	9.	Evaluation pipeline runs
-
-	•	groundedness score
-	•	latency metric
-	•	token cost
-
-	10.	Dashboard visualizes logs and metrics
-
-⸻
-
-6. Evaluation Design
-
-Evaluation is a key part of the project.
-
-The system records metrics for each request.
-
-Latency
-
-Total request time.
-
-Token Cost
-
-Estimated cost based on model token usage.
-
-Groundedness
-
-Measures whether the response is supported by retrieved documents.
-
-Possible method:
-	•	LLM-as-judge prompt
-	•	compare answer with retrieved context
-	•	score from 1–5
-
-Prompt Version Comparison
-
-Multiple prompt versions can be compared by analyzing:
-	•	groundedness score
-	•	latency
-	•	token cost
-
-This allows prompt experimentation and iterative improvement.
-
-⸻
-
-7. Technology Stack
-
-API Layer
-	•	FastAPI
-	•	Pydantic
-
-Data Storage
-	•	Postgres
-	•	pgvector
-
-Model Providers
-	•	OpenAI / Azure OpenAI
-	•	optional open-source model
-
-Retrieval
-	•	embeddings API
-	•	vector similarity search
-
-Dashboard
-	•	Streamlit
-
-Infrastructure
-	•	Docker
-
-⸻
-
-8. Future Extensions
-
-The gateway can later support additional applications:
-	•	document summarization
-	•	internal knowledge copilots
-	•	classification workflows
-	•	automated report generation
-
-Additional platform capabilities may include:
-	•	model fallback routing
-	•	safety moderation layer
-	•	async evaluation pipelines
-	•	experiment tracking
-	•	prompt registry UI
-
-⸻
-
-## Project Structure
-genai-gateway
-│
-├── README.md
-├── docker-compose.yml
-├── requirements.txt
-├── .env.example
-│
-├── app
-│   ├── main.py
-│   │
-│   ├── api
-│   │   └── query.py
-│   │
-│   ├── gateway
-│   │   ├── router.py
-│   │   ├── prompt_manager.py
-│   │   ├── retrieval.py
-│   │   └── model_client.py
-│   │
-│   ├── evaluation
-│   │   ├── groundedness.py
-│   │   ├── latency.py
-│   │   └── cost.py
-│   │
-│   ├── logging
-│   │   └── request_logger.py
-│   │
-│   ├── schemas
-│   │   ├── request_schema.py
-│   │   └── response_schema.py
-│   │
-│   └── config
-│       └── settings.py
-│
-├── ingestion
-│   ├── load_documents.py
-│   ├── chunking.py
-│   └── embeddings.py
-│
-├── database
-│   ├── models.py
-│   └── migrations
-│
-├── prompts
-│   └── legal_qa
-│       ├── v1.txt
-│       └── v2.txt
-│
-├── evaluation_dataset
-│   └── sample_questions.json
-│
-├── dashboard
-│   └── app.py
-│
-└── docs
-    ├── architecture.md
-    └── system_design.png
-
-## Request Lifecycle
-User Question
-    │
-    ▼
-POST /query
-    │
-    ▼
-Validate Request Schema
-    │
-    ▼
-Load Prompt Template (v1 / v2)
-    │
-    ▼
-Embed Query
-    │
-    ▼
-Retrieve Top-k Legal Chunks
-    │
-    ▼
-Assemble Final Prompt
-(system prompt + context + user question)
-    │
-    ▼
-Route to Selected Model
-    │
-    ▼
-Generate Answer
-    │
-    ├──────────────┐
-    ▼              ▼
-Log Request      Run Evaluation
-(metadata)       • groundedness
-                 • latency
-                 • token cost
-    │              │
-    └──────┬───────┘
-           ▼
-   Store Results in Postgres
-           │
-           ▼
-   Display in Dashboard
-
-## Use case system diagram
-
+```text
 ┌─────────────────────┐
 │ Legal Q&A Assistant │
 └──────────┬──────────┘
@@ -390,7 +67,7 @@ Log Request      Run Evaluation
 ┌──────────┐ ┌──────────────┐
 │Retrieval │ │ Model Backend│
 │• vector  │ │• OpenAI      │
-│• top-k   │ │• open model  │
+│• top-k   │ │• Azure OpenAI│
 └────┬─────┘ └──────┬───────┘
      │              │
      └──────┬───────┘
@@ -405,13 +82,16 @@ Log Request      Run Evaluation
 ┌─────────────────────┐
 │ Dashboard / Storage │
 └─────────────────────┘
+```
 
 ## High-Level Architecture
+
+```text
 ┌──────────────────────────────┐
 │       Client Applications    │
 │  • Legal Q&A Assistant       │
-│  • (Future) Summarizer       │
-│  • (Future) Classifier       │
+│  • Future Summarizer         │
+│  • Future Classifier         │
 └───────────────┬──────────────┘
                 │
                 ▼
@@ -431,11 +111,11 @@ Log Request      Run Evaluation
 ┌───────────────┐   ┌────────────────┐
 │ Retrieval     │   │ Model Backends │
 │ Layer         │   │                │
-│ • Chunking    │   │ • OpenAI/Azure │
-│ • Embeddings  │   │ • Open model   │
-│ • Vector DB   │   │                │
-│ • Top-k docs  │   └────────────────┘
-└───────┬───────┘
+│ • Chunking    │   │ • OpenAI       │
+│ • Embeddings  │   │ • Azure OpenAI │
+│ • Vector DB   │   │ • Open model   │
+│ • Top-k docs  │   │                │
+└───────┬───────┘   └────────────────┘
         │
         ▼
 ┌──────────────────────────────┐
@@ -455,20 +135,280 @@ Log Request      Run Evaluation
 │ • Evaluation results         │
 │ • Streamlit dashboard        │
 └──────────────────────────────┘
+```
 
+## MVP Scope
 
-## Evaluation Flow
+The MVP is a gateway-first RAG implementation with one end-to-end flow.
 
-Generated Answer
-      │
-      ▼
-Retrieved Context
-      │
-      ▼
-LLM-as-Judge
-      │
-      ▼
-Groundedness Score
-      │
-      ▼
-Store + Compare Across Prompt Versions
+Included:
+
+- `POST /query` endpoint
+- task-aware prompt loading
+- prompt version selection
+- retrieval interface for top-k context assembly
+- model invocation through a gateway client
+- request logging
+- evaluation outputs for groundedness, latency, and token cost
+- simple dashboard for inspecting request records
+
+Out of scope for now:
+
+- authentication
+- multi-user access
+- advanced safety controls
+- rate limiting
+- async job execution
+- admin UI
+
+## Request Lifecycle
+
+The intended flow is:
+
+1. Client sends a request to `POST /query`
+2. Gateway validates the request schema
+3. Gateway selects the prompt version for the task
+4. Gateway runs retrieval and assembles context
+5. Gateway calls the selected model backend
+6. Gateway logs request and response metadata
+7. Gateway computes evaluation signals
+8. Dashboard and storage layers expose the results
+
+```text
+User Question
+    │
+    ▼
+POST /query
+    │
+    ▼
+Validate Request Schema
+    │
+    ▼
+Load Prompt Template
+(task + version)
+    │
+    ▼
+Retrieve Top-k Legal Chunks
+    │
+    ▼
+Assemble Final Prompt
+(system prompt + context + question)
+    │
+    ▼
+Route To Selected Model
+    │
+    ▼
+Generate Answer
+    │
+    ├──────────────┐
+    ▼              ▼
+Log Request      Run Evaluation
+(metadata)       • groundedness
+                 • latency
+                 • token cost
+    │              │
+    └──────┬───────┘
+           ▼
+   Store Results In Postgres
+           │
+           ▼
+   Display In Dashboard
+```
+
+Example request:
+
+```json
+{
+  "question": "What is the main obligation in Article 5?",
+  "task": "legal_qa",
+  "prompt_version": "v1"
+}
+```
+
+## Evaluation Focus
+
+Evaluation is a core feature of the project, not a reporting add-on.
+
+The first metrics are:
+
+- groundedness score
+- latency in milliseconds
+- token usage
+- estimated token cost
+
+The next step after the scaffold is to make prompt version comparison easy across logged requests.
+
+## Current Repo Structure
+
+This repo follows a simple gateway-oriented layout:
+
+```text
+genai-gateway/
+├── app/
+│   ├── api/
+│   │   └── query.py
+│   ├── config/
+│   │   └── settings.py
+│   ├── evaluation/
+│   │   ├── cost.py
+│   │   ├── groundedness.py
+│   │   └── latency.py
+│   ├── gateway/
+│   │   ├── model_client.py
+│   │   ├── prompt_manager.py
+│   │   ├── retrieval.py
+│   │   └── router.py
+│   ├── logging/
+│   │   └── request_logger.py
+│   ├── schemas/
+│   │   ├── request_schema.py
+│   │   └── response_schema.py
+│   └── main.py
+├── alembic/
+│   ├── env.py
+│   └── versions/
+├── dashboard/
+│   └── app.py
+├── database/
+│   ├── session.py
+│   └── models.py
+├── docs/
+│   └── architecture.md
+├── evaluation_dataset/
+│   └── sample_questions.json
+├── ingestion/
+│   ├── chunking.py
+│   ├── embeddings.py
+│   └── load_documents.py
+├── prompts/
+│   └── legal_qa/
+│       ├── v1.txt
+│       └── v2.txt
+├── .env.example
+├── docker-compose.yml
+├── pyproject.toml
+└── README.md
+```
+
+## Current Status
+
+The repository currently contains a working scaffold, not the full platform.
+
+Implemented now:
+
+- FastAPI app entrypoint
+- `/query` API contract
+- prompt file loading
+- placeholder retrieval seam
+- direct model client wrapper
+- local JSONL request logging
+- evaluation helper modules
+- SQLAlchemy engine and session setup
+- initial Postgres ORM models
+- Alembic migration baseline
+- minimal Streamlit dashboard
+
+Not implemented yet:
+
+- pgvector-backed indexing and search
+- ingestion pipeline into the database
+- provider routing across multiple models
+- LLM-as-judge groundedness evaluation
+- prompt registry stored in the database
+
+## Local Development
+
+This project uses `uv` for dependency and virtual environment management.
+
+Install `uv` if needed:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Install Python 3.11 for the project:
+
+```bash
+uv python install 3.11
+```
+
+Create the virtual environment with that interpreter:
+
+```bash
+uv venv --python 3.11
+```
+
+Install project dependencies:
+
+```bash
+uv sync
+```
+
+Include development tools:
+
+```bash
+uv sync --extra dev
+```
+
+Create an environment file:
+
+```bash
+cp .env.example .env
+```
+
+Activate the environment if you want a shell-local Python:
+
+```bash
+source .venv/bin/activate
+```
+
+Run the API:
+
+```bash
+uv run uvicorn app.main:app --reload
+```
+
+Run Postgres locally:
+
+```bash
+docker compose up -d
+```
+
+Apply database migrations:
+
+```bash
+uv run alembic upgrade head
+```
+
+Run the dashboard:
+
+```bash
+uv run streamlit run dashboard/app.py
+```
+
+## Planned Next Steps
+
+The next development steps are:
+
+1. Implement document and chunk persistence in Postgres
+2. Replace placeholder retrieval with pgvector search
+3. Persist query logs and evaluation results through the database layer
+4. Add prompt comparison views in the dashboard
+5. Seed prompt and example-document data for the legal RAG flow
+
+## Design Direction
+
+A few deliberate constraints shape this repo:
+
+- gateway first, application second
+- evaluation is part of the architecture
+- avoid agent framework complexity unless a later use case requires it
+- keep retrieval and model layers replaceable
+
+That is why the legal RAG app is treated as an example workload rather than the product boundary.
+
+## Learning Notes
+
+This repository also serves a self-education purpose. Supporting notes live in `docs/`.
+
+- [Database stack note](docs/learning-notes-database-stack.md): Postgres, SQLAlchemy, Alembic, and `pgvector`
