@@ -284,6 +284,8 @@ genai-gateway/
 │   └── legal_qa/
 │       ├── v1.txt
 │       └── v2.txt
+├── scripts/
+│   └── ingest_legal_document.py
 ├── .env.example
 ├── docker-compose.yml
 ├── pyproject.toml
@@ -299,19 +301,21 @@ Implemented now:
 - FastAPI app entrypoint
 - `/query` API contract
 - prompt file loading
-- placeholder retrieval seam
+- database-backed retrieval seam
+- structural legal chunking for article/clause-aware ingestion
 - direct model client wrapper
 - local JSONL request logging
 - evaluation helper modules
 - SQLAlchemy engine and session setup
 - initial Postgres ORM models
 - Alembic migration baseline
+- legal PDF ingestion script
+- deterministic local embeddings for ingestion and retrieval development
 - minimal Streamlit dashboard
 
 Not implemented yet:
 
-- pgvector-backed indexing and search
-- ingestion pipeline into the database
+- production-grade ingestion workflow and metadata enrichment
 - provider routing across multiple models
 - LLM-as-judge groundedness evaluation
 - prompt registry stored in the database
@@ -356,6 +360,23 @@ Create an environment file:
 cp .env.example .env
 ```
 
+Default embedding configuration for local development:
+
+```bash
+EMBEDDING_PROVIDER=deterministic
+EMBEDDING_MODEL=text-embedding-3-small
+```
+
+To use real OpenAI embeddings later:
+
+```bash
+EMBEDDING_PROVIDER=openai
+OPENAI_API_KEY=...
+EMBEDDING_MODEL=text-embedding-3-small
+```
+
+If you change `EMBEDDING_PROVIDER` or `EMBEDDING_MODEL`, re-ingest the corpus before querying. The gateway now validates embedding configuration against the stored document metadata and will fail fast on mismatches.
+
 Activate the environment if you want a shell-local Python:
 
 ```bash
@@ -380,6 +401,12 @@ Apply database migrations:
 uv run alembic upgrade head
 ```
 
+Ingest the example legal document:
+
+```bash
+uv run python scripts/ingest_legal_document.py
+```
+
 Run the dashboard:
 
 ```bash
@@ -390,11 +417,11 @@ uv run streamlit run dashboard/app.py
 
 The next development steps are:
 
-1. Implement document and chunk persistence in Postgres
-2. Replace placeholder retrieval with pgvector search
-3. Persist query logs and evaluation results through the database layer
-4. Add prompt comparison views in the dashboard
-5. Seed prompt and example-document data for the legal RAG flow
+1. Persist query logs and evaluation results through the database layer
+2. Improve retrieval quality and chunk metadata handling for the legal corpus
+3. Add prompt comparison views in the dashboard
+4. Seed more legal documents for multi-document retrieval
+5. Replace deterministic local embeddings with a real embedding provider
 
 ## Design Direction
 
@@ -407,8 +434,18 @@ A few deliberate constraints shape this repo:
 
 That is why the legal RAG app is treated as an example workload rather than the product boundary.
 
+## Architecture Decisions
+
+This repository also captures design decisions as lightweight ADRs in `docs/adr/`.
+
+- [ADR 001: Database stack](docs/adr/001-database-stack.md)
+- [ADR 002: Chunking strategy for legal documents](docs/adr/002-chunking-strategy.md)
+
 ## Learning Notes
 
-This repository also serves a self-education purpose. Supporting notes live in `docs/`.
+Longer explanatory notes live in `docs/learning-notes/`.
 
-- [Database stack note](docs/learning-notes-database-stack.md): Postgres, SQLAlchemy, Alembic, and `pgvector`
+- [Database stack](docs/learning-notes/database-stack.md)
+- [Chunking logic](docs/learning-notes/chunking-logic.md)
+- [Provider strategy](docs/learning-notes/provider-strategy.md)
+- [Showcase roadmap](docs/learning-notes/showcase-roadmap.md)

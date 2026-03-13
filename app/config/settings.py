@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     api_port: int = 8000
     openai_api_key: str = ""
     openai_model: str = "gpt-4.1-mini"
+    embedding_provider: str = "deterministic"
+    embedding_model: str = "text-embedding-3-small"
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/genai_gateway"
     database_echo: bool = False
     prompt_root: str = "prompts"
