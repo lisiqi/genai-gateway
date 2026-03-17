@@ -25,6 +25,17 @@ def load_request_rows() -> tuple[list[dict], str]:
             )
         table_rows = []
         for query_log, evaluation in rows:
+            trace_json = query_log.trace_json or []
+            retrieval_ms = sum(
+                float(event.get("duration_ms", 0.0))
+                for event in trace_json
+                if str(event.get("stage", "")).startswith("retrieval.")
+            )
+            generation_ms = sum(
+                float(event.get("duration_ms", 0.0))
+                for event in trace_json
+                if str(event.get("stage", "")).startswith("generation.")
+            )
             table_rows.append(
                 {
                     "timestamp": query_log.created_at.isoformat() if query_log.created_at else None,
@@ -38,6 +49,9 @@ def load_request_rows() -> tuple[list[dict], str]:
                     "fallback_model": query_log.fallback_model,
                     "routing_reason": query_log.routing_reason,
                     "latency_ms": query_log.latency_ms,
+                    "retrieval_ms": retrieval_ms,
+                    "generation_ms": generation_ms,
+                    "trace_events": len(trace_json),
                     "groundedness": evaluation.groundedness_score if evaluation is not None else None,
                     "answer_relevance": (
                         evaluation.answer_relevance_score if evaluation is not None else None
@@ -47,6 +61,8 @@ def load_request_rows() -> tuple[list[dict], str]:
                         evaluation.completeness_score if evaluation is not None else None
                     ),
                     "cost_usd": evaluation.estimated_cost_usd if evaluation is not None else None,
+                    "pricing_source": evaluation.pricing_source if evaluation is not None else None,
+                    "cost_is_estimated": evaluation.cost_is_estimated if evaluation is not None else None,
                     "question": query_log.question,
                 }
             )
@@ -79,11 +95,24 @@ def load_request_rows() -> tuple[list[dict], str]:
                     "fallback_model": routing.get("fallback_model"),
                     "routing_reason": routing.get("reason"),
                     "latency_ms": response_payload.get("latency_ms"),
+                    "retrieval_ms": sum(
+                        float(event.get("duration_ms", 0.0))
+                        for event in response_payload.get("trace", {}).get("events", [])
+                        if str(event.get("stage", "")).startswith("retrieval.")
+                    ),
+                    "generation_ms": sum(
+                        float(event.get("duration_ms", 0.0))
+                        for event in response_payload.get("trace", {}).get("events", [])
+                        if str(event.get("stage", "")).startswith("generation.")
+                    ),
+                    "trace_events": len(response_payload.get("trace", {}).get("events", [])),
                     "groundedness": evaluation.get("groundedness_score"),
                     "answer_relevance": evaluation.get("answer_relevance_score"),
                     "citation_score": evaluation.get("citation_score"),
                     "completeness_score": evaluation.get("completeness_score"),
                     "cost_usd": evaluation.get("estimated_cost_usd"),
+                    "pricing_source": evaluation.get("pricing_source"),
+                    "cost_is_estimated": evaluation.get("cost_is_estimated"),
                     "question": request_payload.get("question"),
                 }
             )
@@ -133,16 +162,20 @@ def render_summary_metrics(frame: pd.DataFrame, data_source: str) -> None:
     """Render top-line comparison metrics."""
     fallback_rate = (frame["fallback_used"].fillna(False).mean() * 100) if not frame.empty else 0.0
     avg_latency = frame["latency_ms"].mean() if not frame.empty else 0.0
+    avg_retrieval = frame["retrieval_ms"].mean() if not frame.empty else 0.0
+    avg_generation = frame["generation_ms"].mean() if not frame.empty else 0.0
     avg_groundedness = frame["groundedness"].mean() if not frame.empty else 0.0
     avg_relevance = frame["answer_relevance"].mean() if not frame.empty else 0.0
     avg_cost = frame["cost_usd"].mean() if not frame.empty else 0.0
 
-    col1, col2, col3, col4, col5 = st.columns(5)
+    col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
     col1.metric("Requests", len(frame))
     col2.metric("Avg Latency (ms)", f"{avg_latency:.1f}")
-    col3.metric("Avg Groundedness", f"{avg_groundedness:.2f}")
-    col4.metric("Avg Relevance", f"{avg_relevance:.2f}")
-    col5.metric("Fallback Rate", f"{fallback_rate:.1f}%")
+    col3.metric("Avg Retrieval (ms)", f"{avg_retrieval:.1f}")
+    col4.metric("Avg Generation (ms)", f"{avg_generation:.1f}")
+    col5.metric("Avg Groundedness", f"{avg_groundedness:.2f}")
+    col6.metric("Avg Relevance", f"{avg_relevance:.2f}")
+    col7.metric("Fallback Rate", f"{fallback_rate:.1f}%")
     st.metric("Avg Cost (USD)", f"{avg_cost:.6f}")
     st.caption(f"Data source: {data_source}")
 
@@ -156,6 +189,8 @@ def build_group_summary(frame: pd.DataFrame, group_by: str) -> pd.DataFrame:
         .agg(
             requests=("question", "count"),
             avg_latency_ms=("latency_ms", "mean"),
+            avg_retrieval_ms=("retrieval_ms", "mean"),
+            avg_generation_ms=("generation_ms", "mean"),
             avg_groundedness=("groundedness", "mean"),
             avg_relevance=("answer_relevance", "mean"),
             avg_citation=("citation_score", "mean"),
@@ -169,6 +204,8 @@ def build_group_summary(frame: pd.DataFrame, group_by: str) -> pd.DataFrame:
     return grouped.round(
         {
             "avg_latency_ms": 1,
+            "avg_retrieval_ms": 1,
+            "avg_generation_ms": 1,
             "avg_groundedness": 2,
             "avg_relevance": 2,
             "avg_citation": 2,
@@ -207,11 +244,16 @@ def render_request_log(frame: pd.DataFrame) -> None:
         "fallback_model",
         "routing_reason",
         "latency_ms",
+        "retrieval_ms",
+        "generation_ms",
+        "trace_events",
         "groundedness",
         "answer_relevance",
         "citation_score",
         "completeness_score",
         "cost_usd",
+        "pricing_source",
+        "cost_is_estimated",
         "question",
     ]
     st.subheader("Request Log")

@@ -106,6 +106,12 @@ if st.button("Ask", type="primary", use_container_width=True):
             eval_col1, eval_col2 = st.columns(2)
             eval_col1.metric("Citation Score", f"{result['evaluation']['citation_score']:.2f}")
             eval_col2.metric("Completeness", f"{result['evaluation']['completeness_score']:.2f}")
+            st.caption(
+                "Cost source: "
+                f"{result['evaluation'].get('pricing_source') or 'n/a'} | "
+                f"input=${result['evaluation']['input_cost_usd']:.6f} | "
+                f"output=${result['evaluation']['output_cost_usd']:.6f}"
+            )
 
             route = result["routing"]
             st.caption(
@@ -143,3 +149,10 @@ if st.button("Ask", type="primary", use_container_width=True):
 
             with st.expander("Raw Response"):
                 st.json(payload)
+
+            with st.expander("Trace"):
+                for event in result["trace"]["events"]:
+                    st.markdown(f"**{event['stage']}**")
+                    st.caption(f"{event['duration_ms']:.2f} ms")
+                    if event.get("metadata"):
+                        st.json(event["metadata"])

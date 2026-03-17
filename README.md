@@ -383,6 +383,8 @@ Implemented now:
 - runtime service and RAG workflow orchestration
 - provider-backed chat generation
 - Postgres-backed query and evaluation persistence
+- lightweight workflow tracing persisted to Postgres
+- model-aware cost accounting by provider and model
 - local JSONL request log mirror
 - evaluation helper modules
 - offline retrieval evaluation module
@@ -566,11 +568,11 @@ The legal Q&A frontend lets you choose `cheap`, `default`, or `high_quality` and
 
 The next development steps are:
 
-1. Add end-to-end groundedness evaluation beyond the current placeholder heuristic
-2. Improve retrieval quality and chunk metadata handling for the legal corpus
-3. Add prompt comparison views in the dashboard
-4. Seed more legal documents for multi-document retrieval
-5. Replace deterministic local embeddings with a real embedding provider
+1. Add a real reranker instead of pass-through reranking
+2. Strengthen answer evaluation beyond deterministic heuristics
+3. Add optional Langfuse integration for external tracing and experiment observability
+4. Replace deterministic local embeddings with a real non-placeholder provider strategy
+5. Expand the legal corpus for multi-document retrieval and comparison
 
 ## Architecture Decisions
 
@@ -591,5 +593,6 @@ Longer explanatory notes live in `docs/learning-notes/`.
 - [Chunking logic](docs/learning-notes/chunking-logic.md)
 - [Evaluation architecture](docs/learning-notes/evaluation-architecture.md)
 - [Model routing policy](docs/learning-notes/model-routing-policy.md)
+- [Observability and cost accounting](docs/learning-notes/observability-and-cost-accounting.md)
 - [Provider strategy](docs/learning-notes/provider-strategy.md)
 - [Showcase roadmap](docs/learning-notes/showcase-roadmap.md)

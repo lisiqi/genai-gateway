@@ -38,6 +38,7 @@ class RequestLogger:
                 completion_tokens=response.token_usage.completion_tokens,
                 total_tokens=response.token_usage.total_tokens,
                 retrieved_chunk_ids=retrieved_chunk_ids,
+                trace_json=response.trace.model_dump()["events"],
                 status="completed",
             )
             session.add(query_log)
@@ -51,6 +52,10 @@ class RequestLogger:
                     citation_score=response.evaluation.citation_score,
                     completeness_score=response.evaluation.completeness_score,
                     estimated_cost_usd=response.evaluation.estimated_cost_usd,
+                    input_cost_usd=response.evaluation.input_cost_usd,
+                    output_cost_usd=response.evaluation.output_cost_usd,
+                    pricing_source=response.evaluation.pricing_source,
+                    cost_is_estimated=response.evaluation.cost_is_estimated,
                     latency_ms=response.latency_ms,
                     prompt_tokens=response.token_usage.prompt_tokens,
                     completion_tokens=response.token_usage.completion_tokens,

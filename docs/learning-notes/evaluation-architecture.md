@@ -61,9 +61,11 @@ Typical fields:
 - latency
 - token usage
 - estimated cost
+- provider/model-aware cost accounting
 - selected model
 - selected prompt version
 - retrieved chunks
+- stage-level traces
 
 This is operational platform data and should be stored in Postgres.
 

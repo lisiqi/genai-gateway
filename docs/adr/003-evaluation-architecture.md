@@ -57,9 +57,11 @@ Typical fields:
 - latency
 - token usage
 - estimated cost
+- provider/model-aware cost accounting
 - selected prompt version
 - selected model
 - retrieved chunks
+- stage-level traces
 
 This layer belongs in the platform data model and should be stored in Postgres.
 

@@ -109,6 +109,7 @@ class QueryLog(Base):
     completion_tokens: Mapped[int] = mapped_column(Integer, default=0)
     total_tokens: Mapped[int] = mapped_column(Integer, default=0)
     retrieved_chunk_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
+    trace_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     status: Mapped[str] = mapped_column(String(30), default="completed")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -138,6 +139,10 @@ class Evaluation(Base):
     citation_score: Mapped[float] = mapped_column(Float, default=0.0)
     completeness_score: Mapped[float] = mapped_column(Float, default=0.0)
     estimated_cost_usd: Mapped[float] = mapped_column(Float)
+    input_cost_usd: Mapped[float] = mapped_column(Float, default=0.0)
+    output_cost_usd: Mapped[float] = mapped_column(Float, default=0.0)
+    pricing_source: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cost_is_estimated: Mapped[bool] = mapped_column(Boolean, default=True)
     latency_ms: Mapped[float] = mapped_column(Float)
     prompt_tokens: Mapped[int] = mapped_column(Integer, default=0)
     completion_tokens: Mapped[int] = mapped_column(Integer, default=0)
