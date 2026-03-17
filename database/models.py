@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, JSON, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -94,8 +94,14 @@ class QueryLog(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     task: Mapped[str] = mapped_column(String(100), index=True)
+    quality_mode: Mapped[str] = mapped_column(String(50), default="default")
     prompt_version: Mapped[str] = mapped_column(String(50))
+    selected_provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
     model_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    fallback_used: Mapped[bool] = mapped_column(Boolean, default=False)
+    fallback_provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    fallback_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    routing_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     question: Mapped[str] = mapped_column(Text)
     answer: Mapped[str] = mapped_column(Text)
     latency_ms: Mapped[float] = mapped_column(Float)

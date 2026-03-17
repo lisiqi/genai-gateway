@@ -25,10 +25,10 @@ class ModelRoutingPolicy:
     def __init__(self) -> None:
         self.settings = get_settings()
 
-    def select(self, *, task: str, prompt_version: str) -> ModelRoutingDecision:
+    def select(self, *, task: str, quality_mode: str, prompt_version: str) -> ModelRoutingDecision:
         """Return the routing decision for a request."""
         rules = self._load_rules()
-        task_rule = rules.get(task, {})
+        task_rule = self._resolve_rule(rules=rules, task=task, quality_mode=quality_mode)
         provider = str(task_rule.get("provider", self.settings.chat_provider)).strip().lower()
         model = str(task_rule.get("model", self._default_model_for_provider(provider))).strip()
         fallback_provider = task_rule.get("fallback_provider")
@@ -38,9 +38,9 @@ class ModelRoutingPolicy:
         if fallback_model is not None:
             fallback_model = str(fallback_model).strip()
         reason = (
-            f"task override for '{task}'"
+            f"task override for '{task}' in quality mode '{quality_mode}'"
             if task_rule
-            else f"default provider for prompt version '{prompt_version}'"
+            else f"default provider for prompt version '{prompt_version}' in quality mode '{quality_mode}'"
         )
         if fallback_provider and not fallback_model:
             fallback_model = self._default_model_for_provider(fallback_provider)
@@ -51,6 +51,16 @@ class ModelRoutingPolicy:
             fallback_provider=fallback_provider,
             fallback_model=fallback_model,
         )
+
+    def _resolve_rule(
+        self,
+        *,
+        rules: dict[str, dict[str, str]],
+        task: str,
+        quality_mode: str,
+    ) -> dict[str, str]:
+        """Resolve the most specific routing rule for a request."""
+        return rules.get(f"{task}.{quality_mode}", rules.get(task, {}))
 
     def _load_rules(self) -> dict[str, dict[str, str]]:
         """Parse task-based routing rules from config."""

@@ -50,7 +50,7 @@ Examples:
 The first routing policy should be simple and config-driven:
 
 - task-aware provider/model selection
-- optional mode-based selection such as `default` vs `high_quality`
+- optional mode-based selection such as `cheap`, `default`, and `high_quality`
 - explicit fallback only when needed
 
 Advanced routing infrastructure is deferred for now.

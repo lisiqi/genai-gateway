@@ -111,7 +111,9 @@ It can decide based on:
 Examples:
 
 - `legal_qa.default` -> `openrouter` + `openai/gpt-4.1-mini`
-- `legal_qa.high_quality` -> `openrouter` + stronger model
+- `legal_qa.cheap` -> low-cost default model
+- `legal_qa.default` -> balanced model choice
+- `legal_qa.high_quality` -> stronger model
 - local fallback -> `openai` if OpenRouter is unavailable
 
 This is enough to demonstrate:

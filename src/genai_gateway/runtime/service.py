@@ -16,6 +16,7 @@ class RuntimeService:
         """Execute the default RAG workflow."""
         context = RuntimeContext(
             task=request.task,
+            quality_mode=request.quality_mode,
             prompt_version=request.prompt_version,
             top_k=request.top_k,
         )

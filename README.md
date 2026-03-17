@@ -476,18 +476,18 @@ OPENAI_API_KEY=...
 OPENAI_MODEL=gpt-4.1-mini
 ```
 
-Optional task-based routing overrides:
+Optional quality-mode-aware routing overrides:
 
 ```bash
-MODEL_ROUTING_RULES_JSON='{"legal_qa":{"provider":"openrouter","model":"openai/gpt-4.1-mini"}}'
+MODEL_ROUTING_RULES_JSON='{"legal_qa.cheap":{"provider":"openrouter","model":"openai/gpt-4.1-mini"},"legal_qa.default":{"provider":"openrouter","model":"openai/gpt-4.1-mini"},"legal_qa.high_quality":{"provider":"openai","model":"gpt-4.1"}}'
 ```
 
 The runtime owns this routing decision. Provider adapters only execute the selected backend call.
 
-Optional task-based fallback:
+Optional quality-mode-aware fallback:
 
 ```bash
-MODEL_ROUTING_RULES_JSON='{"legal_qa":{"provider":"openrouter","model":"openai/gpt-4.1-mini","fallback_provider":"openai","fallback_model":"gpt-4.1-mini"}}'
+MODEL_ROUTING_RULES_JSON='{"legal_qa.cheap":{"provider":"openrouter","model":"openai/gpt-4.1-mini","fallback_provider":"openai","fallback_model":"gpt-4.1-mini"},"legal_qa.default":{"provider":"openrouter","model":"openai/gpt-4.1-mini","fallback_provider":"openai","fallback_model":"gpt-4.1-mini"},"legal_qa.high_quality":{"provider":"openai","model":"gpt-4.1"}}'
 ```
 
 If the selected route raises an exception, the runtime can retry once with the configured fallback route.
@@ -522,11 +522,25 @@ Ingest the example legal document:
 uv run python scripts/ingest_legal_document.py
 ```
 
+Seed a few demo requests across `cheap`, `default`, and `high_quality`:
+
+```bash
+uv run python scripts/seed_demo_requests.py
+```
+
+Clear request history before reseeding if you want a clean dashboard:
+
+```bash
+uv run python scripts/reset_request_history.py
+```
+
 Run the dashboard:
 
 ```bash
 uv run streamlit run dashboard/app.py
 ```
+
+The dashboard reads request and routing data from Postgres, with a JSONL fallback for local resilience. It surfaces routing decisions, quality-mode distribution, and fallback usage.
 
 Run the example legal document Q&A backend:
 
@@ -539,6 +553,8 @@ Run the example legal document Q&A frontend:
 ```bash
 uv run streamlit run apps/legal_doc_qa/frontend/app.py
 ```
+
+The legal Q&A frontend lets you choose `cheap`, `default`, or `high_quality` and shows the selected provider/model, routing reason, and whether fallback was used.
 
 ## Planned Next Steps
 

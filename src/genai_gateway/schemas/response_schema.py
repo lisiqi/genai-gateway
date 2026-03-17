@@ -47,6 +47,7 @@ class QueryResponse(BaseModel):
 
     answer: str
     task: str
+    quality_mode: str
     prompt_version: str
     model_name: str | None = None
     retrieved_chunks: list[RetrievedChunk]

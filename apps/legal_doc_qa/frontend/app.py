@@ -11,11 +11,12 @@ import streamlit as st
 DEFAULT_BACKEND_URL = "http://localhost:8010"
 
 
-def ask_backend(*, backend_url: str, question: str, prompt_version: str, top_k: int) -> dict:
+def ask_backend(*, backend_url: str, question: str, quality_mode: str, prompt_version: str, top_k: int) -> dict:
     """Call the example app backend over HTTP."""
     payload = json.dumps(
         {
             "question": question,
+            "quality_mode": quality_mode,
             "prompt_version": prompt_version,
             "top_k": top_k,
         }
@@ -66,6 +67,7 @@ st.caption("Example application built on top of the genai_gateway runtime.")
 
 backend_url = st.sidebar.text_input("Backend URL", value=DEFAULT_BACKEND_URL)
 prompt_version = st.sidebar.selectbox("Prompt version", options=["v1", "v2"], index=0)
+quality_mode = st.sidebar.selectbox("Quality mode", options=["cheap", "default", "high_quality"], index=1)
 top_k = st.sidebar.slider("Top K", min_value=1, max_value=10, value=4)
 
 question = st.text_area(
@@ -82,6 +84,7 @@ if st.button("Ask", type="primary", use_container_width=True):
             payload = ask_backend(
                 backend_url=backend_url,
                 question=question.strip(),
+                quality_mode=quality_mode,
                 prompt_version=prompt_version,
                 top_k=top_k,
             )
@@ -99,6 +102,19 @@ if st.button("Ask", type="primary", use_container_width=True):
             col1.metric("Latency (ms)", f"{result['latency_ms']:.1f}")
             col2.metric("Groundedness", f"{result['evaluation']['groundedness_score']:.2f}")
             col3.metric("Cost (USD)", f"{result['evaluation']['estimated_cost_usd']:.6f}")
+
+            route = result["routing"]
+            st.caption(
+                "Route: "
+                f"{route['selected_provider']} / {route['selected_model']} | "
+                f"quality_mode={result['quality_mode']} | "
+                f"reason={route.get('reason') or 'n/a'}"
+            )
+            if route.get("fallback_used"):
+                st.warning(
+                    "Fallback used: "
+                    f"{route.get('fallback_provider')} / {route.get('fallback_model')}"
+                )
 
             with st.expander("Retrieved Chunks", expanded=True):
                 for idx, chunk in enumerate(result["retrieved_chunks"], start=1):

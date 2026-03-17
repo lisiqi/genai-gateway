@@ -16,3 +16,15 @@ Run locally:
 uv run uvicorn apps.legal_doc_qa.backend.app:app --reload --port 8010
 uv run streamlit run apps/legal_doc_qa/frontend/app.py
 ```
+
+Populate the dashboard with a few example requests:
+
+```bash
+uv run python scripts/seed_demo_requests.py
+```
+
+Reset request history first if you want a clean demo:
+
+```bash
+uv run python scripts/reset_request_history.py
+```

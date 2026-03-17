@@ -23,8 +23,14 @@ class RequestLogger:
         with SessionLocal() as session:
             query_log = QueryLog(
                 task=request.task,
+                quality_mode=request.quality_mode,
                 prompt_version=request.prompt_version,
+                selected_provider=response.routing.selected_provider,
                 model_name=response.model_name,
+                fallback_used=response.routing.fallback_used,
+                fallback_provider=response.routing.fallback_provider,
+                fallback_model=response.routing.fallback_model,
+                routing_reason=response.routing.reason,
                 question=request.question,
                 answer=response.answer,
                 latency_ms=response.latency_ms,

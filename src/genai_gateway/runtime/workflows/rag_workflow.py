@@ -41,6 +41,7 @@ class RagWorkflow:
         )
         routing_decision = self.model_routing_policy.select(
             task=context.task,
+            quality_mode=context.quality_mode,
             prompt_version=context.prompt_version,
         )
         chat_provider = get_chat_provider(
@@ -86,6 +87,7 @@ class RagWorkflow:
         response = QueryResponse(
             answer=answer,
             task=context.task,
+            quality_mode=context.quality_mode,
             prompt_version=context.prompt_version,
             model_name=selected_model,
             retrieved_chunks=[RetrievedChunk.model_validate(chunk) for chunk in reranked],

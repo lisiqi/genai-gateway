@@ -25,6 +25,7 @@ def ask(request: AskRequest) -> AskResponse:
     """Answer a legal document question using the runtime."""
     result = service.ask(
         question=request.question,
+        quality_mode=request.quality_mode,
         prompt_version=request.prompt_version,
         top_k=request.top_k,
     )

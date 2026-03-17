@@ -8,5 +8,6 @@ class RuntimeContext:
     """Carries execution metadata through a workflow run."""
 
     task: str
+    quality_mode: str
     prompt_version: str
     top_k: int | None = None
