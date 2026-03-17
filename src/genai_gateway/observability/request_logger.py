@@ -46,7 +46,7 @@ class RequestLogger:
                     prompt_tokens=response.token_usage.prompt_tokens,
                     completion_tokens=response.token_usage.completion_tokens,
                     total_tokens=response.token_usage.total_tokens,
-                    notes=None,
+                    notes=response.evaluation.routing_notes,
                 )
             )
             session.commit()

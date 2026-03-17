@@ -28,6 +28,18 @@ class EvaluationSummary(BaseModel):
 
     groundedness_score: float
     estimated_cost_usd: float
+    routing_notes: str | None = None
+
+
+class RoutingSummary(BaseModel):
+    """Routing details for the selected and fallback model path."""
+
+    selected_provider: str
+    selected_model: str
+    fallback_used: bool = False
+    fallback_provider: str | None = None
+    fallback_model: str | None = None
+    reason: str | None = None
 
 
 class QueryResponse(BaseModel):
@@ -40,4 +52,5 @@ class QueryResponse(BaseModel):
     retrieved_chunks: list[RetrievedChunk]
     latency_ms: float
     token_usage: TokenUsage
+    routing: RoutingSummary
     evaluation: EvaluationSummary

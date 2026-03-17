@@ -458,6 +458,40 @@ EMBEDDING_MODEL=text-embedding-3-small
 
 If you change `EMBEDDING_PROVIDER` or `EMBEDDING_MODEL`, re-ingest the corpus before querying. The gateway now validates embedding configuration against the stored document metadata and will fail fast on mismatches.
 
+To use OpenRouter as the chat provider:
+
+```bash
+CHAT_PROVIDER=openrouter
+OPENROUTER_API_KEY=...
+OPENROUTER_MODEL=openai/gpt-4.1-mini
+OPENROUTER_HTTP_REFERER=
+OPENROUTER_TITLE=genai-gateway
+```
+
+To use direct OpenAI as the chat provider:
+
+```bash
+CHAT_PROVIDER=openai
+OPENAI_API_KEY=...
+OPENAI_MODEL=gpt-4.1-mini
+```
+
+Optional task-based routing overrides:
+
+```bash
+MODEL_ROUTING_RULES_JSON='{"legal_qa":{"provider":"openrouter","model":"openai/gpt-4.1-mini"}}'
+```
+
+The runtime owns this routing decision. Provider adapters only execute the selected backend call.
+
+Optional task-based fallback:
+
+```bash
+MODEL_ROUTING_RULES_JSON='{"legal_qa":{"provider":"openrouter","model":"openai/gpt-4.1-mini","fallback_provider":"openai","fallback_model":"gpt-4.1-mini"}}'
+```
+
+If the selected route raises an exception, the runtime can retry once with the configured fallback route.
+
 Activate the environment if you want a shell-local Python:
 
 ```bash
@@ -523,6 +557,7 @@ This repository also captures design decisions as lightweight ADRs in `docs/adr/
 - [ADR 001: Database stack](docs/adr/001-database-stack.md)
 - [ADR 002: Chunking strategy for legal documents](docs/adr/002-chunking-strategy.md)
 - [ADR 003: Evaluation architecture](docs/adr/003-evaluation-architecture.md)
+- [ADR 004: Model routing policy](docs/adr/004-model-routing-policy.md)
 
 ## Learning Notes
 
@@ -533,5 +568,6 @@ Longer explanatory notes live in `docs/learning-notes/`.
 - [Database stack](docs/learning-notes/database-stack.md)
 - [Chunking logic](docs/learning-notes/chunking-logic.md)
 - [Evaluation architecture](docs/learning-notes/evaluation-architecture.md)
+- [Model routing policy](docs/learning-notes/model-routing-policy.md)
 - [Provider strategy](docs/learning-notes/provider-strategy.md)
 - [Showcase roadmap](docs/learning-notes/showcase-roadmap.md)

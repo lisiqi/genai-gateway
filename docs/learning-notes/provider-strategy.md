@@ -26,6 +26,54 @@ They do not need to be sourced the same way.
 
 This gives a good balance between convenience and architectural quality.
 
+## Provider Abstraction vs Model Routing
+
+These are related, but they are not the same thing.
+
+Provider abstraction answers:
+
+- how the system talks to a backend API
+- how provider-specific request and response formats are hidden
+- how one backend can be swapped for another without changing the runtime workflow
+
+Examples:
+
+- `OpenAIChatProvider`
+- `OpenRouterChatProvider`
+- `AzureOpenAIChatProvider`
+
+Model routing answers:
+
+- which provider or model should be selected for a given request
+- when to use a cheaper model vs a stronger model
+- when to apply fallback or task-specific routing rules
+
+Examples:
+
+- use a cheaper model for default legal Q&A
+- use a stronger model for offline evaluation or prompt comparison
+- fall back to a second provider if the first one fails
+
+So the relationship is:
+
+- provider abstraction = integration layer
+- model routing = decision layer
+
+OpenRouter fits naturally as a provider backend, not as the architectural owner of routing decisions.
+
+That means this repo can support:
+
+- `OpenRouterChatProvider` as a backend implementation
+
+while still keeping:
+
+- task-to-model policy
+- fallback rules
+- cost-aware selection
+- prompt-version-aware routing
+
+inside the runtime itself.
+
 ## Embedding Logic Should Also Be Abstracted
 
 Yes, the embedding logic should also live behind an abstraction.
