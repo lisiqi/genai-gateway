@@ -51,6 +51,7 @@ class GatewayRouter:
             answer=answer,
             task=request.task,
             prompt_version=request.prompt_version,
+            model_name=self.model_client.settings.openai_model if self.model_client.client or self.model_client.settings.openai_model else None,
             retrieved_chunks=[RetrievedChunk.model_validate(chunk) for chunk in retrieved],
             latency_ms=latency_ms,
             token_usage=usage,

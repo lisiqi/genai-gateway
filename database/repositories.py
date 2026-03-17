@@ -150,7 +150,7 @@ class RetrievalRepository:
         rows = self.session.execute(stmt).all()
         return [
             {
-                "chunk_id": f"{row.id}",
+                "chunk_id": f"{row.source_path}::chunk::{row.chunk_index}",
                 "source": row.source_path,
                 "content": row.content,
                 "score": float(row.score) if row.score is not None else None,

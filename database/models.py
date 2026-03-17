@@ -95,12 +95,14 @@ class QueryLog(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     task: Mapped[str] = mapped_column(String(100), index=True)
     prompt_version: Mapped[str] = mapped_column(String(50))
+    model_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     question: Mapped[str] = mapped_column(Text)
     answer: Mapped[str] = mapped_column(Text)
     latency_ms: Mapped[float] = mapped_column(Float)
     prompt_tokens: Mapped[int] = mapped_column(Integer, default=0)
     completion_tokens: Mapped[int] = mapped_column(Integer, default=0)
     total_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    retrieved_chunk_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
     status: Mapped[str] = mapped_column(String(30), default="completed")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -127,6 +129,10 @@ class Evaluation(Base):
     query_log_id: Mapped[int] = mapped_column(ForeignKey("query_logs.id", ondelete="CASCADE"), index=True)
     groundedness_score: Mapped[float] = mapped_column(Float)
     estimated_cost_usd: Mapped[float] = mapped_column(Float)
+    latency_ms: Mapped[float] = mapped_column(Float)
+    prompt_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    completion_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    total_tokens: Mapped[int] = mapped_column(Integer, default=0)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

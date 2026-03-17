@@ -1,20 +1,41 @@
 # GenAI Gateway
 
-A reusable LLM gateway focused on prompt versioning, routing, request logging, and evaluation.
+A production-oriented GenAI gateway with a lightweight orchestration runtime.
 
-The main product in this repo is the gateway layer. The example application used to exercise it is a production legal document RAG system.
+This project goes beyond a simple API proxy. It implements a runtime layer between applications and LLM providers, responsible for prompt composition, retrieval pipelines, reranking, model routing, and evaluation.
+
+The goal is to demonstrate how real-world GenAI systems are structured using transparent, controllable components instead of heavy black-box frameworks.
 
 ## Purpose
 
-Most GenAI demos couple application logic directly to a model provider. This project takes the opposite approach:
+Most GenAI demos tightly couple application logic with a model provider or framework.
+
+This project takes a different approach:
 
 - applications call a gateway, not a model SDK directly
-- the gateway owns prompt selection and versioning
-- retrieval is orchestrated behind a stable interface
-- request metadata is logged centrally
-- evaluation is part of the request lifecycle, not an afterthought
+- the gateway acts as a runtime layer coordinating the full request lifecycle
+- prompt selection and versioning are centralized
+- retrieval and reranking are orchestrated explicitly
+- evaluation is integrated into execution, not added afterwards
+- logging and observability are first-class concerns
 
-The goal is to model a production-style GenAI platform boundary, even though the first concrete use case is a single legal Q&A app.
+The objective is not to build a universal product, but to model a **production-style GenAI system boundary** with clear responsibilities and extensibility.
+
+## Conceptual Model
+
+This project can be viewed as a runtime layer for GenAI systems, similar to how an operating system abstracts and orchestrates hardware resources for applications.
+
+```text
+Applications (QA, summarization, etc.)
+        │
+        ▼
+GenAI Runtime / Gateway
+(prompt, retrieval, routing, evaluation)
+        │
+        ▼
+LLM Providers + Retrieval Systems
+(OpenAI, Azure, vector DB, etc.)
+```
 
 ## Example Application
 
@@ -26,26 +47,49 @@ It answers questions grounded in legal and policy documents such as:
 - court rulings
 - policy reports
 
-This is a good first application because it stresses the parts of the platform that matter:
+This use case is intentionally chosen because it stresses the system components that matter most:
 
 - retrieval quality
 - grounded answers
 - prompt comparison
 - latency and token cost tracking
 
-## What The Gateway Owns
+The application is treated as a workload, not the product itself.
 
-The gateway is responsible for:
+## What The Gateway (Runtime) Owns
 
-- request schema validation
-- prompt registry and version selection
-- model routing
-- retrieval orchestration
-- response generation
-- request logging
-- evaluation hooks
+The gateway acts as a runtime layer that coordinates the full GenAI request lifecycle.
 
-The legal document RAG flow is only one consumer of that gateway design. Later, the same gateway should be able to support summarization, classification, and other AI tasks.
+It is responsible for:
+
+- abstracting model providers behind a unified interface
+- orchestrating multi-step workflows (retrieval → reranking → prompt → generation)
+- managing prompt templates and versioning
+- coordinating retrieval pipelines and context assembly
+- routing requests across models based on task or cost
+- capturing structured logs and traces
+- integrating evaluation into execution flow
+
+The legal RAG flow is just one consumer of this runtime. The same design can support:
+- summarization
+- classification
+- tool-augmented workflows
+
+## Why not use a heavy framework?
+
+Many GenAI frameworks (e.g. LangChain) provide powerful abstractions, but often introduce:
+- hidden execution complexity
+- reduced control over prompt and retrieval logic
+- harder debugging and tracing
+- tight coupling to framework-specific patterns
+
+In production systems, engineers often prefer:
+- transparent execution flow
+- explicit control over retrieval and prompt composition
+- minimal abstraction overhead
+- easier observability and debugging
+
+This project intentionally implements a **lightweight orchestration runtime** to expose the core building blocks of GenAI systems while keeping control and clarity.
 
 ## Use Case System Diagram
 
@@ -139,18 +183,19 @@ The legal document RAG flow is only one consumer of that gateway design. Later, 
 
 ## MVP Scope
 
-The MVP is a gateway-first RAG implementation with one end-to-end flow.
+The MVP is a gateway-first, runtime-oriented RAG implementation with a single end-to-end workflow.
 
 Included:
 
 - `POST /query` endpoint
-- task-aware prompt loading
-- prompt version selection
-- retrieval interface for top-k context assembly
-- model invocation through a gateway client
-- request logging
-- evaluation outputs for groundedness, latency, and token cost
-- simple dashboard for inspecting request records
+- task-aware prompt loading and version selection
+- retrieval interface for context assembly
+- explicit workflow orchestration (retrieve → rerank → generate)
+- model invocation via provider abstraction
+- request logging and tracing
+- evaluation signals (groundedness, latency, token cost)
+- simple dashboard for inspecting execution results
+
 
 Out of scope for now:
 
@@ -159,7 +204,7 @@ Out of scope for now:
 - advanced safety controls
 - rate limiting
 - async job execution
-- admin UI
+- full production deployment concerns
 
 ## Request Lifecycle
 
@@ -227,16 +272,29 @@ Example request:
 
 ## Evaluation Focus
 
-Evaluation is a core feature of the project, not a reporting add-on.
+Evaluation is treated as a **core system concern**, not a reporting layer.
 
-The first metrics are:
+The initial metrics include:
 
 - groundedness score
 - latency in milliseconds
 - token usage
 - estimated token cost
 
-The next step after the scaffold is to make prompt version comparison easy across logged requests.
+Future extensions include:
+- prompt version comparison
+- retrieval quality benchmarks
+- LLM-as-judge evaluation
+
+## Design Direction
+
+A few deliberate constraints shape this repo:
+
+- gateway/runtime first, application second
+- evaluation is part of the execution pipeline
+- avoid unnecessary framework complexity
+- keep components modular and replaceable
+- prefer explicit orchestration over implicit abstraction
 
 ## Current Repo Structure
 
@@ -275,6 +333,7 @@ genai-gateway/
 ├── docs/
 │   └── architecture.md
 ├── evaluation_dataset/
+│   ├── legal_qa_retrieval_samples.jsonl
 │   └── sample_questions.json
 ├── ingestion/
 │   ├── chunking.py
@@ -286,6 +345,10 @@ genai-gateway/
 │       └── v2.txt
 ├── scripts/
 │   └── ingest_legal_document.py
+├── retrieval_evaluation/
+│   ├── datasets.py
+│   ├── harness.py
+│   └── metrics.py
 ├── .env.example
 ├── docker-compose.yml
 ├── pyproject.toml
@@ -304,8 +367,10 @@ Implemented now:
 - database-backed retrieval seam
 - structural legal chunking for article/clause-aware ingestion
 - direct model client wrapper
-- local JSONL request logging
+- Postgres-backed query and evaluation persistence
+- local JSONL request log mirror
 - evaluation helper modules
+- offline retrieval evaluation module
 - SQLAlchemy engine and session setup
 - initial Postgres ORM models
 - Alembic migration baseline
@@ -417,22 +482,11 @@ uv run streamlit run dashboard/app.py
 
 The next development steps are:
 
-1. Persist query logs and evaluation results through the database layer
+1. Add end-to-end groundedness evaluation beyond the current placeholder heuristic
 2. Improve retrieval quality and chunk metadata handling for the legal corpus
 3. Add prompt comparison views in the dashboard
 4. Seed more legal documents for multi-document retrieval
 5. Replace deterministic local embeddings with a real embedding provider
-
-## Design Direction
-
-A few deliberate constraints shape this repo:
-
-- gateway first, application second
-- evaluation is part of the architecture
-- avoid agent framework complexity unless a later use case requires it
-- keep retrieval and model layers replaceable
-
-That is why the legal RAG app is treated as an example workload rather than the product boundary.
 
 ## Architecture Decisions
 
@@ -440,12 +494,16 @@ This repository also captures design decisions as lightweight ADRs in `docs/adr/
 
 - [ADR 001: Database stack](docs/adr/001-database-stack.md)
 - [ADR 002: Chunking strategy for legal documents](docs/adr/002-chunking-strategy.md)
+- [ADR 003: Evaluation architecture](docs/adr/003-evaluation-architecture.md)
 
 ## Learning Notes
+
+This repository is also a "learning by building" project, similar to implementing a minimal operating system or database to understand system internals.
 
 Longer explanatory notes live in `docs/learning-notes/`.
 
 - [Database stack](docs/learning-notes/database-stack.md)
 - [Chunking logic](docs/learning-notes/chunking-logic.md)
+- [Evaluation architecture](docs/learning-notes/evaluation-architecture.md)
 - [Provider strategy](docs/learning-notes/provider-strategy.md)
 - [Showcase roadmap](docs/learning-notes/showcase-roadmap.md)

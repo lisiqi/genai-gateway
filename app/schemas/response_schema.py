@@ -33,6 +33,7 @@ class QueryResponse(BaseModel):
     answer: str
     task: str
     prompt_version: str
+    model_name: str | None = None
     retrieved_chunks: list[RetrievedChunk]
     latency_ms: float
     token_usage: TokenUsage
