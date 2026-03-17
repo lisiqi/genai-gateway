@@ -120,6 +120,16 @@ if st.button("Ask", type="primary", use_container_width=True):
                 f"quality_mode={result['quality_mode']} | "
                 f"reason={route.get('reason') or 'n/a'}"
             )
+            reranking = result["reranking"]
+            st.caption(
+                "Reranker: "
+                f"{reranking['reranker_type']}"
+                + (
+                    f" / {reranking['reranker_model']}"
+                    if reranking.get("reranker_model")
+                    else ""
+                )
+            )
             if route.get("fallback_used"):
                 st.warning(
                     "Fallback used: "

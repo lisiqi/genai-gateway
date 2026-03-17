@@ -542,6 +542,12 @@ Run a small comparison experiment across prompt versions and quality modes:
 uv run python scripts/run_experiment.py
 ```
 
+Compare reranking on vs off in the same batch:
+
+```bash
+uv run python scripts/run_experiment.py --reranker-types pass_through cross_encoder
+```
+
 Run the dashboard:
 
 ```bash

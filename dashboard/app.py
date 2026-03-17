@@ -44,6 +44,9 @@ def load_request_rows() -> tuple[list[dict], str]:
                     "prompt_version": query_log.prompt_version,
                     "provider": query_log.selected_provider,
                     "model": query_log.model_name,
+                    "reranker_type": query_log.reranker_type,
+                    "reranker_model": query_log.reranker_model,
+                    "reranker_top_k": query_log.reranker_top_k,
                     "fallback_used": query_log.fallback_used,
                     "fallback_provider": query_log.fallback_provider,
                     "fallback_model": query_log.fallback_model,
@@ -90,6 +93,9 @@ def load_request_rows() -> tuple[list[dict], str]:
                     "prompt_version": request_payload.get("prompt_version"),
                     "provider": routing.get("selected_provider"),
                     "model": routing.get("selected_model"),
+                    "reranker_type": response_payload.get("reranking", {}).get("reranker_type"),
+                    "reranker_model": response_payload.get("reranking", {}).get("reranker_model"),
+                    "reranker_top_k": response_payload.get("reranking", {}).get("reranker_top_k"),
                     "fallback_used": routing.get("fallback_used"),
                     "fallback_provider": routing.get("fallback_provider"),
                     "fallback_model": routing.get("fallback_model"),
@@ -134,12 +140,24 @@ def apply_filters(frame: pd.DataFrame) -> pd.DataFrame:
     prompt_options = build_filter_options(frame, "prompt_version")
     provider_options = build_filter_options(frame, "provider")
     model_options = build_filter_options(frame, "model")
+    reranker_type_options = build_filter_options(frame, "reranker_type")
+    reranker_model_options = build_filter_options(frame, "reranker_model")
 
     selected_tasks = st.sidebar.multiselect("Task", options=task_options, default=task_options)
     selected_modes = st.sidebar.multiselect("Quality Mode", options=mode_options, default=mode_options)
     selected_prompts = st.sidebar.multiselect("Prompt Version", options=prompt_options, default=prompt_options)
     selected_providers = st.sidebar.multiselect("Provider", options=provider_options, default=provider_options)
     selected_models = st.sidebar.multiselect("Model", options=model_options, default=model_options)
+    selected_reranker_types = st.sidebar.multiselect(
+        "Reranker Type",
+        options=reranker_type_options,
+        default=reranker_type_options,
+    )
+    selected_reranker_models = st.sidebar.multiselect(
+        "Reranker Model",
+        options=reranker_model_options,
+        default=reranker_model_options,
+    )
     fallback_only = st.sidebar.checkbox("Fallback Only", value=False)
 
     filtered = frame.copy()
@@ -153,6 +171,10 @@ def apply_filters(frame: pd.DataFrame) -> pd.DataFrame:
         filtered = filtered[filtered["provider"].isin(selected_providers)]
     if selected_models:
         filtered = filtered[filtered["model"].isin(selected_models)]
+    if selected_reranker_types:
+        filtered = filtered[filtered["reranker_type"].isin(selected_reranker_types)]
+    if selected_reranker_models:
+        filtered = filtered[filtered["reranker_model"].isin(selected_reranker_models)]
     if fallback_only:
         filtered = filtered[filtered["fallback_used"] == True]
     return filtered
@@ -218,7 +240,7 @@ def build_group_summary(frame: pd.DataFrame, group_by: str) -> pd.DataFrame:
 
 def render_group_tables(frame: pd.DataFrame) -> None:
     """Render grouped comparison tables."""
-    left, middle, right = st.columns(3)
+    left, middle, right, extra = st.columns(4)
     with left:
         st.subheader("By Quality Mode")
         st.dataframe(build_group_summary(frame, "quality_mode"), use_container_width=True, hide_index=True)
@@ -228,6 +250,9 @@ def render_group_tables(frame: pd.DataFrame) -> None:
     with right:
         st.subheader("By Model")
         st.dataframe(build_group_summary(frame, "model"), use_container_width=True, hide_index=True)
+    with extra:
+        st.subheader("By Reranker")
+        st.dataframe(build_group_summary(frame, "reranker_type"), use_container_width=True, hide_index=True)
 
 
 def render_request_log(frame: pd.DataFrame) -> None:
@@ -239,6 +264,9 @@ def render_request_log(frame: pd.DataFrame) -> None:
         "prompt_version",
         "provider",
         "model",
+        "reranker_type",
+        "reranker_model",
+        "reranker_top_k",
         "fallback_used",
         "fallback_provider",
         "fallback_model",

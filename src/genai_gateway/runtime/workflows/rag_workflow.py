@@ -21,6 +21,7 @@ from genai_gateway.schemas.response_schema import (
     EvaluationSummary,
     QueryResponse,
     RetrievedChunk,
+    RerankingSummary,
     RoutingSummary,
     TraceEvent,
     TraceSummary,
@@ -175,6 +176,7 @@ class RagWorkflow:
                 fallback_model=routing_decision.fallback_model,
                 reason=routing_decision.reason,
             ),
+            reranking=RerankingSummary(**self.reranker.config_summary),
             trace=TraceSummary(
                 events=[TraceEvent.model_validate(event) for event in tracer.as_list()],
             ),

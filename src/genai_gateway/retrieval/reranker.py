@@ -15,6 +15,11 @@ class Reranker(ABC):
     def rerank(self, question: str, chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Return reranked chunks for a user question."""
 
+    @property
+    @abstractmethod
+    def config_summary(self) -> dict[str, Any]:
+        """Return a serializable reranker summary."""
+
 
 class PassThroughReranker(Reranker):
     """Default reranker that preserves retrieval order."""
@@ -22,6 +27,15 @@ class PassThroughReranker(Reranker):
     def rerank(self, question: str, chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Return chunks unchanged."""
         return chunks
+
+    @property
+    def config_summary(self) -> dict[str, Any]:
+        """Return pass-through reranker config."""
+        return {
+            "reranker_type": "pass_through",
+            "reranker_model": None,
+            "reranker_top_k": None,
+        }
 
 
 class CrossEncoderReranker(Reranker):
@@ -62,6 +76,15 @@ class CrossEncoderReranker(Reranker):
                 ) from exc
             self._model = CrossEncoder(self.model_name)
         return self._model
+
+    @property
+    def config_summary(self) -> dict[str, Any]:
+        """Return cross-encoder reranker config."""
+        return {
+            "reranker_type": "cross_encoder",
+            "reranker_model": self.model_name,
+            "reranker_top_k": self.top_k,
+        }
 
 
 def get_reranker() -> Reranker:

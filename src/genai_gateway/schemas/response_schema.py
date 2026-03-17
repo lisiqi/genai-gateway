@@ -50,6 +50,14 @@ class RoutingSummary(BaseModel):
     reason: str | None = None
 
 
+class RerankingSummary(BaseModel):
+    """Reranking details for the selected request path."""
+
+    reranker_type: str
+    reranker_model: str | None = None
+    reranker_top_k: int | None = None
+
+
 class TraceEvent(BaseModel):
     """One stage-level trace event."""
 
@@ -76,5 +84,6 @@ class QueryResponse(BaseModel):
     latency_ms: float
     token_usage: TokenUsage
     routing: RoutingSummary
+    reranking: RerankingSummary
     trace: TraceSummary
     evaluation: EvaluationSummary
