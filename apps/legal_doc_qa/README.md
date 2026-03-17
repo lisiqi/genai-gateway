@@ -28,3 +28,9 @@ Reset request history first if you want a clean demo:
 ```bash
 uv run python scripts/reset_request_history.py
 ```
+
+Run a comparison batch across prompt versions and quality modes:
+
+```bash
+uv run python scripts/run_experiment.py
+```

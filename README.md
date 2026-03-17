@@ -534,6 +534,12 @@ Clear request history before reseeding if you want a clean dashboard:
 uv run python scripts/reset_request_history.py
 ```
 
+Run a small comparison experiment across prompt versions and quality modes:
+
+```bash
+uv run python scripts/run_experiment.py
+```
+
 Run the dashboard:
 
 ```bash
