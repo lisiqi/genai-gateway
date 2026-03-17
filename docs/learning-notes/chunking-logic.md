@@ -30,8 +30,8 @@ So chunking directly affects:
 
 The intended strategy is:
 
-1. detect article boundaries first
-2. keep article metadata
+1. parse legal structure first
+2. extract article and clause metadata from that structure
 3. split inside the article at clause boundaries when possible
 4. only keep the whole article as one chunk if it is small enough
 5. if a clause is still too large, split it further
@@ -45,6 +45,8 @@ This gives the best of both worlds:
 
 For this repo, the intended chunking logic is:
 
+- parser = structural understanding
+- metadata extractor = hierarchy and cross-reference enrichment
 - article = structural unit
 - clause = preferred retrieval chunk
 - paragraph or size-based split = fallback only when needed
@@ -53,6 +55,9 @@ So:
 
 - article numbers should be stored in metadata
 - clause numbers should also be stored when available
+- article titles should be stored when available
+- hierarchy labels should be attached to retrieval chunks
+- cross-references should be extracted deterministically when possible
 - the first chunk of an article should keep the heading/title context
 
 ## Why This Fits The Legal RAG Use Case
@@ -68,25 +73,28 @@ Clause-level chunks with article metadata fit those goals well.
 
 ## Current State In This Repo
 
-This repo now uses a structural legal chunker for the DSA ingestion path.
+This repo now uses a structural legal parser plus chunker for the DSA ingestion path.
 
 It:
 
+- parses article and clause structure first
 - detects article headings
 - extracts article numbers
 - detects clause numbering
+- extracts hierarchy labels
+- extracts same-document cross-references
 - stores structural metadata
 - returns clause-level chunks when possible
 
 Size-based chunking is still used as a fallback only when a clause is too large.
 
-Likely metadata fields:
+Current metadata fields include:
 
 - `article_number`
 - `clause_number`
-- `document_title`
-- `source_path`
-- possibly `related_articles` later
+- `article_title`
+- `hierarchy_labels`
+- `cross_references`
 
 ## Mental Model
 

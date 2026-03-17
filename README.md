@@ -352,6 +352,8 @@ genai-gateway/
 │   └── architecture.md
 ├── ingestion/
 │   ├── chunking.py
+│   ├── legal_parser.py
+│   ├── metadata.py
 │   ├── embeddings.py
 │   └── load_documents.py
 ├── scripts/
@@ -376,7 +378,8 @@ Implemented now:
 - `/query` API contract
 - prompt file loading
 - database-backed retrieval seam
-- structural legal chunking for article/clause-aware ingestion
+- structural legal parsing and chunking for article/clause-aware ingestion
+- deterministic legal metadata extraction for hierarchy labels and cross-references
 - runtime service and RAG workflow orchestration
 - provider-backed chat generation
 - Postgres-backed query and evaluation persistence

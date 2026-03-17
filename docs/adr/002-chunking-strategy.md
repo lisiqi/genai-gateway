@@ -21,14 +21,18 @@ The system needs chunk boundaries that respect legal structure while still produ
 
 Use a structural chunking strategy for legal documents:
 
-1. detect article boundaries first
-2. keep article metadata
-3. split inside the article at clause boundaries when possible
-4. keep the whole article as one chunk only if it is small enough
-5. if a clause is still too large, split it further by size or paragraph boundaries
+1. parse document structure first
+2. detect article boundaries and clause boundaries from the parsed structure
+3. extract structural metadata before chunk construction
+4. keep article metadata with each retrieval unit
+5. split inside the article at clause boundaries when possible
+6. keep the whole article as one chunk only if it is small enough
+7. if a clause is still too large, split it further by size or paragraph boundaries
 
 In short:
 
+- parser = structural understanding
+- metadata extractor = hierarchy and cross-reference enrichment
 - article = structural unit
 - clause = preferred retrieval chunk
 - size-based splitting = fallback only when needed
@@ -52,13 +56,14 @@ The chunking strategy should preserve structural metadata such as:
 
 - `article_number`
 - `clause_number`
-- `document_title`
-- `source_path`
+- `article_title`
+- `hierarchy_labels`
+- `cross_references`
 
 Possible future metadata:
 
-- `related_articles`
 - section or title headings
+- richer citation metadata
 
 ## Consequences
 
@@ -77,13 +82,15 @@ Possible future metadata:
 
 ## Current State
 
-The current implementation now uses a structural legal chunker for the DSA ingestion path.
+The current implementation now uses a structural parser plus chunker for the DSA ingestion path.
 
 It:
 
+- parses article and clause structure first
 - detects article headings
 - extracts article numbers
 - detects clause numbering
+- extracts hierarchy labels and same-document cross-references
 - stores structural metadata
 - returns clause-level chunks when possible
 
@@ -95,6 +102,8 @@ The implementation should remain simple and local to this repo.
 
 It does not need a full agent or framework dependency. The important thing is to encode the structural rules needed for legal text:
 
+- parser-first structural extraction
+- metadata extraction for hierarchy and cross-references
 - article-aware splitting
 - clause-aware sub-splitting
 - sensible fallback splitting for oversized text
