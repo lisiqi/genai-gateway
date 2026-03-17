@@ -136,7 +136,12 @@ if st.button("Ask", type="primary", use_container_width=True):
                         heading += f"  \n{title}"
                     st.markdown(heading)
                     if chunk.get("score") is not None:
-                        st.caption(f"Similarity score: {chunk['score']:.3f}")
+                        caption = f"Similarity score: {chunk['score']:.3f}"
+                        if chunk.get("rerank_score") is not None:
+                            caption += f" | Rerank score: {chunk['rerank_score']:.3f}"
+                        st.caption(caption)
+                    elif chunk.get("rerank_score") is not None:
+                        st.caption(f"Rerank score: {chunk['rerank_score']:.3f}")
                     hierarchy_labels = metadata.get("hierarchy_labels") or []
                     if hierarchy_labels:
                         st.caption("Hierarchy: " + " | ".join(hierarchy_labels))

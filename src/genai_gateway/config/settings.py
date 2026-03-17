@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -31,6 +32,17 @@ class Settings(BaseSettings):
     default_task: str = "legal_qa"
     default_prompt_version: str = "v1"
     retrieval_top_k: int = 4
+    reranker_type: str = "pass_through"
+    reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    reranker_top_k: int | None = None
+
+    @field_validator("reranker_top_k", mode="before")
+    @classmethod
+    def _normalize_empty_top_k(cls, value: object) -> object:
+        """Treat empty env values as `None` for optional integer settings."""
+        if value == "":
+            return None
+        return value
 
 
 @lru_cache(maxsize=1)

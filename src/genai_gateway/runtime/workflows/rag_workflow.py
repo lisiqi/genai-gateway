@@ -12,7 +12,7 @@ from genai_gateway.observability.request_logger import RequestLogger
 from genai_gateway.observability.tracing import TraceRecorder
 from genai_gateway.prompts.manager import PromptManager
 from genai_gateway.providers.chat import get_chat_provider
-from genai_gateway.retrieval.reranker import PassThroughReranker
+from genai_gateway.retrieval.reranker import get_reranker
 from genai_gateway.retrieval.retriever import RetrievalService
 from genai_gateway.runtime.context import RuntimeContext
 from genai_gateway.runtime.policies.model_routing import ModelRoutingPolicy
@@ -33,7 +33,7 @@ class RagWorkflow:
     def __init__(self) -> None:
         self.prompt_manager = PromptManager()
         self.retrieval_service = RetrievalService()
-        self.reranker = PassThroughReranker()
+        self.reranker = get_reranker()
         self.model_routing_policy = ModelRoutingPolicy()
         self.request_logger = RequestLogger()
 

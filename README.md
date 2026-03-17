@@ -393,7 +393,7 @@ Implemented now:
 - Alembic migration baseline
 - legal PDF ingestion script
 - deterministic local embeddings for ingestion and retrieval development
-- explicit reranking stage with pass-through default
+- explicit reranking stage with pass-through and optional cross-encoder implementations
 - minimal Streamlit dashboard
 
 Not implemented yet:
@@ -564,15 +564,29 @@ uv run streamlit run apps/legal_doc_qa/frontend/app.py
 
 The legal Q&A frontend lets you choose `cheap`, `default`, or `high_quality` and shows the selected provider/model, routing reason, and whether fallback was used.
 
+To enable cross-encoder reranking locally:
+
+```bash
+uv sync --extra reranking
+```
+
+Then set:
+
+```bash
+RERANKER_TYPE=cross_encoder
+RERANKER_MODEL=cross-encoder/ms-marco-MiniLM-L-6-v2
+RERANKER_TOP_K=
+```
+
 ## Planned Next Steps
 
 The next development steps are:
 
-1. Add a real reranker instead of pass-through reranking
-2. Strengthen answer evaluation beyond deterministic heuristics
-3. Add optional Langfuse integration for external tracing and experiment observability
-4. Replace deterministic local embeddings with a real non-placeholder provider strategy
-5. Expand the legal corpus for multi-document retrieval and comparison
+1. Strengthen answer evaluation beyond deterministic heuristics
+2. Add optional Langfuse integration for external tracing and experiment observability
+3. Replace deterministic local embeddings with a real non-placeholder provider strategy
+4. Expand the legal corpus for multi-document retrieval and comparison
+5. Add reranking-aware comparisons in the dashboard and experiment runner
 
 ## Architecture Decisions
 
@@ -582,6 +596,7 @@ This repository also captures design decisions as lightweight ADRs in `docs/adr/
 - [ADR 002: Chunking strategy for legal documents](docs/adr/002-chunking-strategy.md)
 - [ADR 003: Evaluation architecture](docs/adr/003-evaluation-architecture.md)
 - [ADR 004: Model routing policy](docs/adr/004-model-routing-policy.md)
+- [ADR 005: Reranking architecture](docs/adr/005-reranking-architecture.md)
 
 ## Learning Notes
 
@@ -595,4 +610,5 @@ Longer explanatory notes live in `docs/learning-notes/`.
 - [Model routing policy](docs/learning-notes/model-routing-policy.md)
 - [Observability and cost accounting](docs/learning-notes/observability-and-cost-accounting.md)
 - [Provider strategy](docs/learning-notes/provider-strategy.md)
+- [Reranking](docs/learning-notes/reranking.md)
 - [Showcase roadmap](docs/learning-notes/showcase-roadmap.md)

@@ -10,6 +10,7 @@ class RetrievedChunk(BaseModel):
     source: str
     content: str
     score: float | None = None
+    rerank_score: float | None = None
     title: str | None = None
     chunk_index: int | None = None
     metadata: dict = Field(default_factory=dict)

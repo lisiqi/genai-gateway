@@ -18,12 +18,12 @@ Deliberate decisions for the first pass:
 - No LangChain dependency.
 - No agent framework.
 - Prompt files live on disk first; prompt registry persistence can come next.
-- The reranking stage exists structurally, but currently defaults to pass-through ordering.
+- The reranking stage uses pass-through by default and can be upgraded to cross-encoder reranking via configuration.
 
 Near-term next steps:
 
-1. Add chat-provider abstraction beyond the current OpenAI-backed implementation.
-2. Replace pass-through reranking with a real reranker.
-3. Add tracing and observability integrations beyond JSONL and Postgres persistence.
-4. Add provider routing and model-specific pricing tables.
-5. Upgrade groundedness from heuristic scoring to LLM-as-judge.
+1. Add reranking-aware comparison views and experiments.
+2. Add tracing and observability integrations beyond local persistence.
+3. Upgrade groundedness from heuristic scoring to LLM-as-judge.
+4. Replace deterministic local embeddings with a real provider strategy.
+5. Expand the example application and corpus coverage.
