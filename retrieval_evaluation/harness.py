@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from app.gateway.retrieval import RetrievalService
+from genai_gateway.retrieval.retriever import RetrievalService
 from retrieval_evaluation.datasets import EvaluationDataset
 from retrieval_evaluation.metrics import compute_all
 

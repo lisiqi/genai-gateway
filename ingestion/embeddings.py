@@ -6,7 +6,7 @@ provider-based embeddings.
 
 from __future__ import annotations
 
-from providers.embeddings import get_embedding_provider
+from genai_gateway.providers.embeddings import get_embedding_provider
 
 
 def embed_text(text: str) -> list[float]:

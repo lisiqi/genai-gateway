@@ -298,51 +298,62 @@ A few deliberate constraints shape this repo:
 
 ## Current Repo Structure
 
-This repo follows a simple gateway-oriented layout:
+This repo now uses a `src/` Python package layout so the runtime code is clearly separated from repo-level assets and scripts.
 
 ```text
 genai-gateway/
-├── app/
-│   ├── api/
-│   │   └── query.py
-│   ├── config/
-│   │   └── settings.py
-│   ├── evaluation/
-│   │   ├── cost.py
-│   │   ├── groundedness.py
-│   │   └── latency.py
-│   ├── gateway/
-│   │   ├── model_client.py
-│   │   ├── prompt_manager.py
-│   │   ├── retrieval.py
-│   │   └── router.py
-│   ├── logging/
-│   │   └── request_logger.py
-│   ├── schemas/
-│   │   ├── request_schema.py
-│   │   └── response_schema.py
-│   └── main.py
+├── apps/
+│   └── legal_doc_qa/
+│       ├── backend/
+│       │   └── prompts/
+│       ├── data/
+│       │   ├── eval/
+│       │   └── legal_documents/
+│       └── frontend/
+├── database/
+│   ├── session.py
+│   ├── models.py
+│   └── repositories.py
+├── src/
+│   └── genai_gateway/
+│       ├── api/
+│       │   └── query.py
+│       ├── config/
+│       │   └── settings.py
+│       ├── evaluation/
+│       │   ├── cost.py
+│       │   ├── groundedness.py
+│       │   └── latency.py
+│       ├── observability/
+│       │   └── request_logger.py
+│       ├── prompts/
+│       │   └── manager.py
+│       ├── providers/
+│       │   ├── chat/
+│       │   └── embeddings/
+│       ├── retrieval/
+│       │   ├── retriever.py
+│       │   ├── reranker.py
+│       │   └── indexing.py
+│       ├── runtime/
+│       │   ├── service.py
+│       │   ├── context.py
+│       │   └── workflows/
+│       ├── schemas/
+│       │   ├── request_schema.py
+│       │   └── response_schema.py
+│       └── main.py
 ├── alembic/
 │   ├── env.py
 │   └── versions/
 ├── dashboard/
 │   └── app.py
-├── database/
-│   ├── session.py
-│   └── models.py
 ├── docs/
 │   └── architecture.md
-├── evaluation_dataset/
-│   ├── legal_qa_retrieval_samples.jsonl
-│   └── sample_questions.json
 ├── ingestion/
 │   ├── chunking.py
 │   ├── embeddings.py
 │   └── load_documents.py
-├── prompts/
-│   └── legal_qa/
-│       ├── v1.txt
-│       └── v2.txt
 ├── scripts/
 │   └── ingest_legal_document.py
 ├── retrieval_evaluation/
@@ -366,7 +377,8 @@ Implemented now:
 - prompt file loading
 - database-backed retrieval seam
 - structural legal chunking for article/clause-aware ingestion
-- direct model client wrapper
+- runtime service and RAG workflow orchestration
+- provider-backed chat generation
 - Postgres-backed query and evaluation persistence
 - local JSONL request log mirror
 - evaluation helper modules
@@ -376,6 +388,7 @@ Implemented now:
 - Alembic migration baseline
 - legal PDF ingestion script
 - deterministic local embeddings for ingestion and retrieval development
+- explicit reranking stage with pass-through default
 - minimal Streamlit dashboard
 
 Not implemented yet:
@@ -451,7 +464,7 @@ source .venv/bin/activate
 Run the API:
 
 ```bash
-uv run uvicorn app.main:app --reload
+uv run uvicorn genai_gateway.main:app --reload
 ```
 
 Run Postgres locally:
@@ -476,6 +489,18 @@ Run the dashboard:
 
 ```bash
 uv run streamlit run dashboard/app.py
+```
+
+Run the example legal document Q&A backend:
+
+```bash
+uv run uvicorn apps.legal_doc_qa.backend.app:app --reload --port 8010
+```
+
+Run the example legal document Q&A frontend:
+
+```bash
+uv run streamlit run apps/legal_doc_qa/frontend/app.py
 ```
 
 ## Planned Next Steps

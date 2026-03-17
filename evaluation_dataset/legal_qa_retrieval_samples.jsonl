@@ -1,2 +1,0 @@
-{"question": "What is the aim of this Regulation?", "relevant_chunk_ids": ["data/legal_documents/digital-services-act-en.pdf::chunk::0"], "metadata": {"task": "legal_qa", "document": "digital-services-act-en"}}
-{"question": "What does this Regulation establish in particular?", "relevant_chunk_ids": ["data/legal_documents/digital-services-act-en.pdf::chunk::1"], "metadata": {"task": "legal_qa", "document": "digital-services-act-en"}}

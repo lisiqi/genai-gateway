@@ -30,4 +30,8 @@ dev = [
 ]
 
 [tool.setuptools]
-packages = []
+package-dir = {"" = "."}
+
+[tool.setuptools.packages.find]
+where = [".", "src"]
+include = ["genai_gateway*", "database*"]

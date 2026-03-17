@@ -15,7 +15,7 @@ from database.repositories import DocumentRepository
 from database.session import SessionLocal
 from ingestion.chunking import build_legal_chunk_records
 from ingestion.load_documents import load_pdf_document
-from providers.embeddings import get_embedding_provider
+from genai_gateway.providers.embeddings import get_embedding_provider
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -24,7 +24,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "path",
         nargs="?",
-        default="data/legal_documents/digital-services-act-en.pdf",
+        default="apps/legal_doc_qa/data/legal_documents/digital-services-act-en.pdf",
         help="Path to the source PDF.",
     )
     parser.add_argument("--task", default="legal_qa", help="Task name for retrieval filtering.")
