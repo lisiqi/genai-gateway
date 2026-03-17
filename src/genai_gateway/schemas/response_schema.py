@@ -27,6 +27,9 @@ class EvaluationSummary(BaseModel):
     """Evaluation metrics captured for a request."""
 
     groundedness_score: float
+    answer_relevance_score: float
+    citation_score: float
+    completeness_score: float
     estimated_cost_usd: float
     routing_notes: str | None = None
 

@@ -74,6 +74,7 @@ Examples:
 - groundedness / faithfulness
 - answer relevance
 - completeness
+- citation presence / citation quality
 
 This layer evaluates the output of the whole pipeline, not only the retriever.
 
@@ -128,3 +129,12 @@ Implementation order should be:
 2. offline retrieval evaluation module
 3. end-to-end groundedness / answer evaluation
 4. Langfuse integration for traces and comparisons
+
+For the current implementation, this layer uses deterministic heuristic scores first:
+
+- groundedness
+- answer relevance
+- citation score
+- completeness
+
+These heuristics are intended as a transparent baseline and can later be replaced or complemented by LLM-as-a-judge evaluation.

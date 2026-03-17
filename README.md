@@ -194,6 +194,7 @@ Included:
 - model invocation via provider abstraction
 - request logging and tracing
 - evaluation signals (groundedness, latency, token cost)
+- richer response evaluation signals (groundedness, relevance, citation score, completeness)
 - simple dashboard for inspecting execution results
 
 
@@ -331,6 +332,9 @@ genai-gateway/
 │       ├── providers/
 │       │   ├── chat/
 │       │   └── embeddings/
+│       ├── evaluation/
+│       │   ├── response/
+│       │   └── retrieval/
 │       ├── retrieval/
 │       │   ├── retriever.py
 │       │   ├── reranker.py
@@ -358,10 +362,6 @@ genai-gateway/
 │   └── load_documents.py
 ├── scripts/
 │   └── ingest_legal_document.py
-├── retrieval_evaluation/
-│   ├── datasets.py
-│   ├── harness.py
-│   └── metrics.py
 ├── .env.example
 ├── docker-compose.yml
 ├── pyproject.toml
@@ -546,7 +546,7 @@ Run the dashboard:
 uv run streamlit run dashboard/app.py
 ```
 
-The dashboard reads request and routing data from Postgres, with a JSONL fallback for local resilience. It surfaces routing decisions, quality-mode distribution, and fallback usage.
+The dashboard reads request and routing data from Postgres, with a JSONL fallback for local resilience. It surfaces routing decisions, quality-mode distribution, fallback usage, and grouped answer-quality metrics such as groundedness, relevance, citation score, and completeness.
 
 Run the example legal document Q&A backend:
 

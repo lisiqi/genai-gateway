@@ -1,8 +1,13 @@
 """RAG workflow implementation for the runtime layer."""
 
 from genai_gateway.evaluation.cost import estimate_token_cost
-from genai_gateway.evaluation.groundedness import score_groundedness
 from genai_gateway.evaluation.latency import measure_latency_ms
+from genai_gateway.evaluation.response import (
+    score_answer_relevance,
+    score_citation_presence,
+    score_completeness,
+    score_groundedness,
+)
 from genai_gateway.observability.request_logger import RequestLogger
 from genai_gateway.prompts.manager import PromptManager
 from genai_gateway.providers.chat import get_chat_provider
@@ -80,6 +85,9 @@ class RagWorkflow:
                 )
             )
         groundedness = score_groundedness(answer=answer, retrieved_chunks=reranked)
+        answer_relevance = score_answer_relevance(question=request.question, answer=answer)
+        citation_score = score_citation_presence(answer=answer)
+        completeness_score = score_completeness(answer=answer, retrieved_chunks=reranked)
         token_cost = estimate_token_cost(
             prompt_tokens=usage.prompt_tokens,
             completion_tokens=usage.completion_tokens,
@@ -103,6 +111,9 @@ class RagWorkflow:
             ),
             evaluation=EvaluationSummary(
                 groundedness_score=groundedness,
+                answer_relevance_score=answer_relevance,
+                citation_score=citation_score,
+                completeness_score=completeness_score,
                 estimated_cost_usd=token_cost,
                 routing_notes=(
                     f"Fallback used: {routing_decision.provider}/{routing_decision.model} -> "

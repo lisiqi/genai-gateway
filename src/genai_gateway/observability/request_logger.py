@@ -47,6 +47,9 @@ class RequestLogger:
                 Evaluation(
                     query_log_id=query_log.id,
                     groundedness_score=response.evaluation.groundedness_score,
+                    answer_relevance_score=response.evaluation.answer_relevance_score,
+                    citation_score=response.evaluation.citation_score,
+                    completeness_score=response.evaluation.completeness_score,
                     estimated_cost_usd=response.evaluation.estimated_cost_usd,
                     latency_ms=response.latency_ms,
                     prompt_tokens=response.token_usage.prompt_tokens,

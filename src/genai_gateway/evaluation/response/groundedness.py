@@ -5,7 +5,7 @@ def score_groundedness(answer: str, retrieved_chunks: list[dict]) -> float:
     """Return a simple heuristic groundedness score.
 
     This is intentionally lightweight for the scaffold. We can replace it with
-    an LLM-as-judge implementation once the core request pipeline is stable.
+    an LLM-as-a-judge implementation once the core request pipeline is stable.
     """
     if not retrieved_chunks:
         return 1.0 if not answer else 0.0

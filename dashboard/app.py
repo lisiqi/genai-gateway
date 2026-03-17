@@ -39,6 +39,13 @@ def load_request_rows() -> tuple[list[dict], str]:
                     "routing_reason": query_log.routing_reason,
                     "latency_ms": query_log.latency_ms,
                     "groundedness": evaluation.groundedness_score if evaluation is not None else None,
+                    "answer_relevance": (
+                        evaluation.answer_relevance_score if evaluation is not None else None
+                    ),
+                    "citation_score": evaluation.citation_score if evaluation is not None else None,
+                    "completeness_score": (
+                        evaluation.completeness_score if evaluation is not None else None
+                    ),
                     "cost_usd": evaluation.estimated_cost_usd if evaluation is not None else None,
                     "question": query_log.question,
                 }
@@ -73,6 +80,9 @@ def load_request_rows() -> tuple[list[dict], str]:
                     "routing_reason": routing.get("reason"),
                     "latency_ms": response_payload.get("latency_ms"),
                     "groundedness": evaluation.get("groundedness_score"),
+                    "answer_relevance": evaluation.get("answer_relevance_score"),
+                    "citation_score": evaluation.get("citation_score"),
+                    "completeness_score": evaluation.get("completeness_score"),
                     "cost_usd": evaluation.get("estimated_cost_usd"),
                     "question": request_payload.get("question"),
                 }
@@ -124,14 +134,16 @@ def render_summary_metrics(frame: pd.DataFrame, data_source: str) -> None:
     fallback_rate = (frame["fallback_used"].fillna(False).mean() * 100) if not frame.empty else 0.0
     avg_latency = frame["latency_ms"].mean() if not frame.empty else 0.0
     avg_groundedness = frame["groundedness"].mean() if not frame.empty else 0.0
+    avg_relevance = frame["answer_relevance"].mean() if not frame.empty else 0.0
     avg_cost = frame["cost_usd"].mean() if not frame.empty else 0.0
 
     col1, col2, col3, col4, col5 = st.columns(5)
     col1.metric("Requests", len(frame))
     col2.metric("Avg Latency (ms)", f"{avg_latency:.1f}")
     col3.metric("Avg Groundedness", f"{avg_groundedness:.2f}")
-    col4.metric("Avg Cost (USD)", f"{avg_cost:.6f}")
+    col4.metric("Avg Relevance", f"{avg_relevance:.2f}")
     col5.metric("Fallback Rate", f"{fallback_rate:.1f}%")
+    st.metric("Avg Cost (USD)", f"{avg_cost:.6f}")
     st.caption(f"Data source: {data_source}")
 
 
@@ -145,6 +157,9 @@ def build_group_summary(frame: pd.DataFrame, group_by: str) -> pd.DataFrame:
             requests=("question", "count"),
             avg_latency_ms=("latency_ms", "mean"),
             avg_groundedness=("groundedness", "mean"),
+            avg_relevance=("answer_relevance", "mean"),
+            avg_citation=("citation_score", "mean"),
+            avg_completeness=("completeness_score", "mean"),
             avg_cost_usd=("cost_usd", "mean"),
             fallback_rate=("fallback_used", "mean"),
         )
@@ -155,6 +170,9 @@ def build_group_summary(frame: pd.DataFrame, group_by: str) -> pd.DataFrame:
         {
             "avg_latency_ms": 1,
             "avg_groundedness": 2,
+            "avg_relevance": 2,
+            "avg_citation": 2,
+            "avg_completeness": 2,
             "avg_cost_usd": 6,
             "fallback_rate": 1,
         }
@@ -190,6 +208,9 @@ def render_request_log(frame: pd.DataFrame) -> None:
         "routing_reason",
         "latency_ms",
         "groundedness",
+        "answer_relevance",
+        "citation_score",
+        "completeness_score",
         "cost_usd",
         "question",
     ]

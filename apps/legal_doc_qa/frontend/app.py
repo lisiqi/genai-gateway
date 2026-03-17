@@ -98,10 +98,14 @@ if st.button("Ask", type="primary", use_container_width=True):
             st.subheader("Answer")
             st.write(result["answer"])
 
-            col1, col2, col3 = st.columns(3)
+            col1, col2, col3, col4 = st.columns(4)
             col1.metric("Latency (ms)", f"{result['latency_ms']:.1f}")
             col2.metric("Groundedness", f"{result['evaluation']['groundedness_score']:.2f}")
-            col3.metric("Cost (USD)", f"{result['evaluation']['estimated_cost_usd']:.6f}")
+            col3.metric("Relevance", f"{result['evaluation']['answer_relevance_score']:.2f}")
+            col4.metric("Cost (USD)", f"{result['evaluation']['estimated_cost_usd']:.6f}")
+            eval_col1, eval_col2 = st.columns(2)
+            eval_col1.metric("Citation Score", f"{result['evaluation']['citation_score']:.2f}")
+            eval_col2.metric("Completeness", f"{result['evaluation']['completeness_score']:.2f}")
 
             route = result["routing"]
             st.caption(

@@ -174,4 +174,26 @@ more explicitly than the older repo did.
 3. add end-to-end groundedness scoring
 4. integrate Langfuse for traces and experiments
 
+## Current Repo Implementation
+
+The current implementation now includes deterministic response-level heuristics for:
+
+- groundedness
+- answer relevance
+- citation score
+- completeness
+
+These scores are intentionally simple and transparent. They are useful for:
+
+- comparing prompt versions
+- comparing quality modes
+- comparing model choices
+- populating dashboard views without requiring another model call
+
+They are not a substitute for stronger evaluation methods later. A future step can add:
+
+- LLM-as-a-judge
+- rubric-based scoring
+- stronger citation validation
+
 This order keeps the platform architecture clear and strengthens the showcase value of the repo.

@@ -5,9 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from genai_gateway.evaluation.retrieval.datasets import EvaluationDataset
+from genai_gateway.evaluation.retrieval.metrics import compute_all
 from genai_gateway.retrieval.retriever import RetrievalService
-from retrieval_evaluation.datasets import EvaluationDataset
-from retrieval_evaluation.metrics import compute_all
 
 
 @dataclass
@@ -37,7 +37,13 @@ class RetrievalEvaluationRunner:
     def __init__(self, retrieval_service: RetrievalService | None = None) -> None:
         self.retrieval_service = retrieval_service or RetrievalService()
 
-    def run(self, dataset: EvaluationDataset, *, task: str, k_values: list[int] | None = None) -> RetrievalEvaluationReport:
+    def run(
+        self,
+        dataset: EvaluationDataset,
+        *,
+        task: str,
+        k_values: list[int] | None = None,
+    ) -> RetrievalEvaluationReport:
         if k_values is None:
             k_values = [1, 3, 5, 10]
 
