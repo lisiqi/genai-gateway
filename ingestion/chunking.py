@@ -2,22 +2,8 @@
 
 from __future__ import annotations
 
-import re
-
-
-ARTICLE_HEADING_RE = re.compile(r"^Article\s+(\d+[A-Za-z]?)\s*$", re.MULTILINE)
-CLAUSE_RE = re.compile(r"^\s*(\d+)\.\s", re.MULTILINE)
-
-
-def normalize_legal_text(text: str) -> str:
-    """Normalize a subset of PDF extraction artifacts relevant to legal structure."""
-    normalized = text.replace("\r\n", "\n")
-    normalized = re.sub(r"\bAr\s*ticle\b", "Article", normalized, flags=re.IGNORECASE)
-    normalized = re.sub(r"\bCHAP\s*TER\b", "CHAPTER", normalized, flags=re.IGNORECASE)
-    normalized = re.sub(r"\bSEC\s*TION\b", "SECTION", normalized, flags=re.IGNORECASE)
-    normalized = re.sub(r"\bTIT\s*LE\b", "TITLE", normalized, flags=re.IGNORECASE)
-    normalized = re.sub(r"[ \t]+\n", "\n", normalized)
-    return normalized
+from ingestion.legal_parser import parse_legal_structure
+from ingestion.metadata import build_hierarchy_labels, extract_cross_references
 
 
 def chunk_text(text: str, chunk_size: int = 800, overlap: int = 100) -> list[str]:
@@ -51,40 +37,20 @@ def build_chunk_records(text: str, chunk_size: int = 800, overlap: int = 100) ->
 
 def build_legal_chunk_records(text: str, chunk_size: int = 1800, overlap: int = 200) -> list[dict]:
     """Build article-aware, clause-oriented chunk records for legal documents."""
-    normalized = normalize_legal_text(text)
-    article_matches = list(ARTICLE_HEADING_RE.finditer(normalized))
-    if not article_matches:
-        return build_chunk_records(normalized, chunk_size=chunk_size, overlap=overlap)
+    structure = parse_legal_structure(text)
+    if not structure.articles:
+        return build_chunk_records(structure.normalized_text, chunk_size=chunk_size, overlap=overlap)
 
     chunk_records: list[dict] = []
     chunk_index = 0
 
-    for index, match in enumerate(article_matches):
-        article_number = match.group(1)
-        start = match.start()
-        end = article_matches[index + 1].start() if index + 1 < len(article_matches) else len(normalized)
-        article_block = normalized[start:end].strip()
-        if not article_block:
-            continue
-
-        article_lines = [line.strip() for line in article_block.splitlines() if line.strip()]
-        if not article_lines:
-            continue
-
-        heading = article_lines[0]
-        title = ""
-        body_lines = article_lines[1:]
-        if body_lines and not CLAUSE_RE.match(body_lines[0]):
-            title = body_lines[0]
-            body_lines = body_lines[1:]
-
-        body_text = "\n".join(body_lines).strip()
-        if not body_text:
-            continue
-
-        clause_matches = list(CLAUSE_RE.finditer(body_text))
-        if not clause_matches:
-            full_text = _compose_legal_chunk_text(heading=heading, title=title, body=body_text)
+    for article in structure.articles:
+        if not article.clauses:
+            full_text = _compose_legal_chunk_text(
+                heading=article.heading,
+                title=article.title,
+                body=article.body_text,
+            )
             chunk_records.extend(
                 _build_fallback_chunk_records(
                     text=full_text,
@@ -92,28 +58,44 @@ def build_legal_chunk_records(text: str, chunk_size: int = 1800, overlap: int = 
                     overlap=overlap,
                     start_index=chunk_index,
                     metadata_json={
-                        "article_number": article_number,
+                        "article_number": article.number,
                         "clause_number": [],
-                        "article_title": title,
+                        "article_title": article.title,
+                        "hierarchy_labels": build_hierarchy_labels(
+                            article_number=article.number,
+                            article_title=article.title,
+                            clause_numbers=[],
+                        ),
+                        "cross_references": extract_cross_references(
+                            article.body_text,
+                            current_article_number=article.number,
+                        ),
                     },
                 )
             )
             chunk_index = len(chunk_records)
             continue
 
-        for clause_position, clause_match in enumerate(clause_matches):
-            clause_number = int(clause_match.group(1))
-            clause_start = clause_match.start()
-            clause_end = clause_matches[clause_position + 1].start() if clause_position + 1 < len(clause_matches) else len(body_text)
-            clause_text = body_text[clause_start:clause_end].strip()
-            if not clause_text:
-                continue
-
-            full_text = _compose_legal_chunk_text(heading=heading, title=title, body=clause_text)
+        for clause in article.clauses:
+            full_text = _compose_legal_chunk_text(
+                heading=article.heading,
+                title=article.title,
+                body=clause.text,
+            )
             metadata_json = {
-                "article_number": article_number,
-                "clause_number": [clause_number],
-                "article_title": title,
+                "article_number": article.number,
+                "clause_number": [clause.number],
+                "article_title": article.title,
+                "hierarchy_labels": build_hierarchy_labels(
+                    article_number=article.number,
+                    article_title=article.title,
+                    clause_numbers=[clause.number],
+                ),
+                "cross_references": extract_cross_references(
+                    clause.text,
+                    current_article_number=article.number,
+                    current_clause_numbers=[clause.number],
+                ),
             }
             if len(full_text) <= chunk_size:
                 chunk_records.append(

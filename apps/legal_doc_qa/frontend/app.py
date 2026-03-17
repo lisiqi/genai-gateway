@@ -30,6 +30,36 @@ def ask_backend(*, backend_url: str, question: str, prompt_version: str, top_k: 
         return json.loads(response.read().decode("utf-8"))
 
 
+def format_chunk_location(metadata: dict) -> str:
+    """Format the main structural location of a retrieved chunk."""
+    article_number = metadata.get("article_number")
+    clause_numbers = metadata.get("clause_number") or []
+    parts: list[str] = []
+    if article_number:
+        parts.append(f"Article {article_number}")
+    if clause_numbers:
+        clause_label = ", ".join(str(number) for number in clause_numbers)
+        parts.append(f"Clause {clause_label}")
+    return " | ".join(parts)
+
+
+def format_cross_references(metadata: dict) -> list[str]:
+    """Format cross-reference metadata for display."""
+    references = metadata.get("cross_references") or []
+    formatted: list[str] = []
+    for reference in references:
+        article_number = reference.get("article_number")
+        clause_number = reference.get("clause_number")
+        scope = reference.get("scope")
+        label = f"Article {article_number}"
+        if clause_number is not None:
+            label += f", Clause {clause_number}"
+        if scope == "same_article":
+            label += " (same article)"
+        formatted.append(label)
+    return formatted
+
+
 st.set_page_config(page_title="Legal Doc Q&A", layout="wide")
 st.title("Legal Document Q&A")
 st.caption("Example application built on top of the genai_gateway runtime.")
@@ -72,8 +102,24 @@ if st.button("Ask", type="primary", use_container_width=True):
 
             with st.expander("Retrieved Chunks", expanded=True):
                 for idx, chunk in enumerate(result["retrieved_chunks"], start=1):
-                    st.markdown(f"**{idx}. {chunk['source']}**")
+                    metadata = chunk.get("metadata", {})
+                    location = format_chunk_location(metadata)
+                    title = metadata.get("article_title") or chunk.get("title")
+                    heading = f"**{idx}. {location or chunk['source']}**"
+                    if title:
+                        heading += f"  \n{title}"
+                    st.markdown(heading)
+                    if chunk.get("score") is not None:
+                        st.caption(f"Similarity score: {chunk['score']:.3f}")
+                    hierarchy_labels = metadata.get("hierarchy_labels") or []
+                    if hierarchy_labels:
+                        st.caption("Hierarchy: " + " | ".join(hierarchy_labels))
                     st.write(chunk["content"])
+                    cross_references = format_cross_references(metadata)
+                    if cross_references:
+                        st.caption("Cross-references: " + ", ".join(cross_references))
+                    with st.expander(f"Chunk metadata #{idx}"):
+                        st.json(metadata)
 
             with st.expander("Raw Response"):
                 st.json(payload)
