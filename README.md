@@ -458,6 +458,36 @@ OPENAI_API_KEY=...
 EMBEDDING_MODEL=text-embedding-3-small
 ```
 
+To use local TEI embeddings:
+
+```bash
+EMBEDDING_PROVIDER=tei
+TEI_BASE_URL=http://localhost:8080/v1
+TEI_MODEL=Qwen/Qwen3-Embedding-0.6B
+TEI_EMBEDDING_DIMENSIONS=1024
+```
+
+On Apple Silicon Macs, do not try to run TEI through the default Docker workflow. Run `text-embeddings-router` locally with Metal support instead, and keep Docker for Postgres only.
+
+Recommended Apple Silicon setup:
+
+```bash
+brew install rust protobuf
+xcode-select --install
+git clone https://github.com/huggingface/text-embeddings-inference.git
+cd text-embeddings-inference
+cargo install --path router -F metal
+text-embeddings-router --model-id Qwen/Qwen3-Embedding-0.6B --port 8080
+```
+
+Here, `metal` means Apple's GPU acceleration backend. The `-F metal` build flag enables TEI to use the Apple Silicon GPU through Metal instead of relying on an NVIDIA-style GPU path.
+
+Optional TEI Docker path for Linux/x86 environments:
+
+```bash
+docker compose --profile tei-docker up -d
+```
+
 If you change `EMBEDDING_PROVIDER` or `EMBEDDING_MODEL`, re-ingest the corpus before querying. The gateway now validates embedding configuration against the stored document metadata and will fail fast on mismatches.
 
 To use OpenRouter as the chat provider:
@@ -506,10 +536,22 @@ Run the API:
 uv run uvicorn genai_gateway.main:app --reload
 ```
 
-Run Postgres locally:
+Run local infrastructure:
 
 ```bash
 docker compose up -d
+```
+
+This starts:
+
+- Postgres with `pgvector`
+
+On Apple Silicon, this is the intended default local infra command. TEI should run as a local `text-embeddings-router` process, not through Docker.
+
+If you want TEI in Docker on a compatible Linux/x86 environment:
+
+```bash
+docker compose --profile tei-docker up -d
 ```
 
 Apply database migrations:
@@ -603,6 +645,7 @@ This repository also captures design decisions as lightweight ADRs in `docs/adr/
 - [ADR 003: Evaluation architecture](docs/adr/003-evaluation-architecture.md)
 - [ADR 004: Model routing policy](docs/adr/004-model-routing-policy.md)
 - [ADR 005: Reranking architecture](docs/adr/005-reranking-architecture.md)
+- [ADR 006: Embedding backend strategy](docs/adr/006-embedding-backend-strategy.md)
 
 ## Learning Notes
 
@@ -613,6 +656,7 @@ Longer explanatory notes live in `docs/learning-notes/`.
 - [Database stack](docs/learning-notes/database-stack.md)
 - [Chunking logic](docs/learning-notes/chunking-logic.md)
 - [Evaluation architecture](docs/learning-notes/evaluation-architecture.md)
+- [Embedding backend strategy](docs/learning-notes/embedding-backend-strategy.md)
 - [Model routing policy](docs/learning-notes/model-routing-policy.md)
 - [Observability and cost accounting](docs/learning-notes/observability-and-cost-accounting.md)
 - [Provider strategy](docs/learning-notes/provider-strategy.md)

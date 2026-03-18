@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from openai import OpenAI
 
 from genai_gateway.providers.embeddings.base import EmbeddingProvider
@@ -46,10 +48,18 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         )
         return list(response.data[0].embedding)
 
-    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+    def embed_texts(
+        self,
+        texts: list[str],
+        *,
+        progress_callback: Callable[[int, int, int], None] | None = None,
+    ) -> list[list[float]]:
         """Embed a batch of texts using the OpenAI embeddings API."""
         response = self._client.embeddings.create(
             model=self._model,
             input=texts,
         )
-        return [list(item.embedding) for item in response.data]
+        embeddings = [list(item.embedding) for item in response.data]
+        if progress_callback is not None and texts:
+            progress_callback(len(texts), len(texts), len(texts))
+        return embeddings

@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     openrouter_title: str = "genai-gateway"
     embedding_provider: str = "deterministic"
     embedding_model: str = "text-embedding-3-small"
+    tei_base_url: str = "http://localhost:8080/v1"
+    tei_model: str = "Qwen/Qwen3-Embedding-0.6B"
+    tei_embedding_dimensions: int = 1024
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/genai_gateway"
     database_echo: bool = False
     prompt_root: str = "apps/legal_doc_qa/backend/prompts"
