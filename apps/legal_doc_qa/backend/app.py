@@ -28,5 +28,6 @@ def ask(request: AskRequest) -> AskResponse:
         quality_mode=request.quality_mode,
         prompt_version=request.prompt_version,
         top_k=request.top_k,
+        reranker_type=request.reranker_type,
     )
     return AskResponse(question=request.question, result=result)

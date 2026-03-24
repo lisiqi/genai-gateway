@@ -34,7 +34,6 @@ class RagWorkflow:
     def __init__(self) -> None:
         self.prompt_manager = PromptManager()
         self.retrieval_service = RetrievalService()
-        self.reranker = get_reranker()
         self.model_routing_policy = ModelRoutingPolicy()
         self.request_logger = RequestLogger()
 
@@ -58,13 +57,17 @@ class RagWorkflow:
             ),
             metadata={"top_k": context.top_k},
         )
+        reranker = get_reranker(reranker_type=context.reranker_type)
         reranked, _ = tracer.measure(
             "retrieval.rerank",
-            lambda: self.reranker.rerank(
+            lambda: reranker.rerank(
                 question=request.question,
                 chunks=retrieved,
             ),
-            metadata={"retrieved_count": len(retrieved)},
+            metadata={
+                "retrieved_count": len(retrieved),
+                "reranker_type": reranker.config_summary["reranker_type"],
+            },
         )
         routing_decision, _ = tracer.measure(
             "routing.select",
@@ -176,7 +179,7 @@ class RagWorkflow:
                 fallback_model=routing_decision.fallback_model,
                 reason=routing_decision.reason,
             ),
-            reranking=RerankingSummary(**self.reranker.config_summary),
+            reranking=RerankingSummary(**reranker.config_summary),
             trace=TraceSummary(
                 events=[TraceEvent.model_validate(event) for event in tracer.as_list()],
             ),

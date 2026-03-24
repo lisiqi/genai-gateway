@@ -9,9 +9,37 @@ import streamlit as st
 
 
 DEFAULT_BACKEND_URL = "http://localhost:8010"
+PROMPT_OPTIONS = {
+    "Grounded answer": {
+        "version": "v1",
+        "help": "Answers only from retrieved context and says when support is missing.",
+    },
+    "Research answer with citations": {
+        "version": "v2",
+        "help": "Pushes for more precise answers, explicit uncertainty, and chunk citations.",
+    },
+}
+QUALITY_MODE_OPTIONS = {
+    "Free test": "free",
+    "Balanced": "default",
+    "Lower cost": "cheap",
+    "Higher quality": "high_quality",
+}
+RERANKER_OPTIONS = {
+    "Off": "pass_through",
+    "Cross-encoder": "cross_encoder",
+}
 
 
-def ask_backend(*, backend_url: str, question: str, quality_mode: str, prompt_version: str, top_k: int) -> dict:
+def ask_backend(
+    *,
+    backend_url: str,
+    question: str,
+    quality_mode: str,
+    prompt_version: str,
+    top_k: int,
+    reranker_type: str,
+) -> dict:
     """Call the example app backend over HTTP."""
     payload = json.dumps(
         {
@@ -19,6 +47,7 @@ def ask_backend(*, backend_url: str, question: str, quality_mode: str, prompt_ve
             "quality_mode": quality_mode,
             "prompt_version": prompt_version,
             "top_k": top_k,
+            "reranker_type": reranker_type,
         }
     ).encode("utf-8")
     req = request.Request(
@@ -65,10 +94,18 @@ st.set_page_config(page_title="Legal Doc Q&A", layout="wide")
 st.title("Legal Document Q&A")
 st.caption("Example application built on top of the genai_gateway runtime.")
 
-backend_url = st.sidebar.text_input("Backend URL", value=DEFAULT_BACKEND_URL)
-prompt_version = st.sidebar.selectbox("Prompt version", options=["v1", "v2"], index=0)
-quality_mode = st.sidebar.selectbox("Quality mode", options=["cheap", "default", "high_quality"], index=1)
-top_k = st.sidebar.slider("Top K", min_value=1, max_value=10, value=4)
+st.sidebar.header("Settings")
+prompt_label = st.sidebar.selectbox("Answer style", options=list(PROMPT_OPTIONS), index=0)
+st.sidebar.caption(PROMPT_OPTIONS[prompt_label]["help"])
+quality_mode_label = st.sidebar.selectbox("Model mode", options=list(QUALITY_MODE_OPTIONS), index=1)
+reranker_label = st.sidebar.selectbox("Reranking", options=list(RERANKER_OPTIONS), index=0)
+top_k = st.sidebar.slider("Retrieved chunks", min_value=1, max_value=10, value=4)
+with st.sidebar.expander("Advanced", expanded=False):
+    backend_url = st.text_input("Backend URL", value=DEFAULT_BACKEND_URL)
+
+prompt_version = PROMPT_OPTIONS[prompt_label]["version"]
+quality_mode = QUALITY_MODE_OPTIONS[quality_mode_label]
+reranker_type = RERANKER_OPTIONS[reranker_label]
 
 question = st.text_area(
     "Question",
@@ -87,6 +124,7 @@ if st.button("Ask", type="primary", use_container_width=True):
                 quality_mode=quality_mode,
                 prompt_version=prompt_version,
                 top_k=top_k,
+                reranker_type=reranker_type,
             )
         except error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="ignore")

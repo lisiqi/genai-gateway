@@ -87,18 +87,23 @@ class CrossEncoderReranker(Reranker):
         }
 
 
-def get_reranker() -> Reranker:
+def get_reranker(
+    *,
+    reranker_type: str | None = None,
+    model_name: str | None = None,
+    top_k: int | None = None,
+) -> Reranker:
     """Build the configured reranker."""
     settings = get_settings()
-    reranker_type = settings.reranker_type.strip().lower()
-    if reranker_type == "pass_through":
+    resolved_reranker_type = (reranker_type or settings.reranker_type).strip().lower()
+    if resolved_reranker_type == "pass_through":
         return PassThroughReranker()
-    if reranker_type == "cross_encoder":
+    if resolved_reranker_type == "cross_encoder":
         return CrossEncoderReranker(
-            model_name=settings.reranker_model,
-            top_k=settings.reranker_top_k,
+            model_name=model_name or settings.reranker_model,
+            top_k=top_k if top_k is not None else settings.reranker_top_k,
         )
     raise ValueError(
-        f"Unsupported reranker type '{settings.reranker_type}'. "
+        f"Unsupported reranker type '{resolved_reranker_type}'. "
         "Expected one of: pass_through, cross_encoder."
     )

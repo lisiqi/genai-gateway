@@ -19,5 +19,6 @@ class RuntimeService:
             quality_mode=request.quality_mode,
             prompt_version=request.prompt_version,
             top_k=request.top_k,
+            reranker_type=request.reranker_type,
         )
         return self.rag_workflow.run(request=request, context=context)

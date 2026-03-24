@@ -22,3 +22,7 @@ class QueryRequest(BaseModel):
         description="Prompt version identifier for the selected task.",
     )
     top_k: int | None = Field(default=None, ge=1, le=20, description="Override retrieval result count.")
+    reranker_type: str | None = Field(
+        default=None,
+        description="Optional reranker override such as pass_through or cross_encoder.",
+    )

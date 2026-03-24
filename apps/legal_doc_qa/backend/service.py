@@ -18,6 +18,7 @@ class LegalDocQAService:
         quality_mode: str = "default",
         prompt_version: str = "v1",
         top_k: int | None = None,
+        reranker_type: str | None = None,
     ) -> QueryResponse:
         """Run a legal document QA request through the runtime."""
         request = QueryRequest(
@@ -26,5 +27,6 @@ class LegalDocQAService:
             quality_mode=quality_mode,
             prompt_version=prompt_version,
             top_k=top_k,
+            reranker_type=reranker_type,
         )
         return self.runtime.handle_query(request)

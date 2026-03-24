@@ -11,3 +11,4 @@ class RuntimeContext:
     quality_mode: str
     prompt_version: str
     top_k: int | None = None
+    reranker_type: str | None = None

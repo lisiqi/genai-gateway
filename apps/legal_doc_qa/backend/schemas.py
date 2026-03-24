@@ -12,6 +12,7 @@ class AskRequest(BaseModel):
     quality_mode: str = Field(default="default")
     prompt_version: str = Field(default="v1")
     top_k: int | None = Field(default=None, ge=1, le=20)
+    reranker_type: str | None = Field(default=None)
 
 
 class AskResponse(BaseModel):

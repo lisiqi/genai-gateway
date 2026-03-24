@@ -511,7 +511,7 @@ OPENAI_MODEL=gpt-4.1-mini
 Optional quality-mode-aware routing overrides:
 
 ```bash
-MODEL_ROUTING_RULES_JSON='{"legal_qa.cheap":{"provider":"openrouter","model":"openai/gpt-4.1-mini"},"legal_qa.default":{"provider":"openrouter","model":"openai/gpt-4.1-mini"},"legal_qa.high_quality":{"provider":"openai","model":"gpt-4.1"}}'
+MODEL_ROUTING_RULES_JSON='{"legal_qa.cheap":{"provider":"openrouter","model":"qwen/qwen3-next-80b-a3b-instruct"},"legal_qa.default":{"provider":"openrouter","model":"qwen/qwen3-next-80b-a3b-instruct"},"legal_qa.high_quality":{"provider":"openrouter","model":"deepseek/deepseek-v3.2"},"legal_qa.free":{"provider":"openrouter","model":"qwen/qwen3-next-80b-a3b-instruct:free"}}'
 ```
 
 The runtime owns this routing decision. Provider adapters only execute the selected backend call.
@@ -610,7 +610,7 @@ Run the example legal document Q&A frontend:
 uv run streamlit run apps/legal_doc_qa/frontend/app.py
 ```
 
-The legal Q&A frontend lets you choose `cheap`, `default`, or `high_quality` and shows the selected provider/model, routing reason, and whether fallback was used.
+The legal Q&A frontend lets you choose `cheap`, `default`, `high_quality`, or `free` and shows the selected provider/model, routing reason, and whether fallback was used.
 
 To enable cross-encoder reranking locally:
 
