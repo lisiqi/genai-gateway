@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
 import json
 from pathlib import Path
 import sys
@@ -16,6 +17,7 @@ from genai_gateway.evaluation.retrieval import EvaluationDataset, RetrievalEvalu
 
 
 DEFAULT_DATASET = "apps/legal_doc_qa/data/eval/legal_qa_retrieval_samples.heuristic.jsonl"
+DEFAULT_ARTIFACT_DIR = "artifacts/retrieval_eval"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -35,7 +37,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--output",
         default=None,
-        help="Optional JSON report path. Defaults beside the dataset with a .report.json suffix.",
+        help="Optional JSON report path. Defaults to a timestamped artifact under artifacts/retrieval_eval/.",
+    )
+    parser.add_argument(
+        "--artifact-dir",
+        default=DEFAULT_ARTIFACT_DIR,
+        help="Base directory for timestamped reports when --output is not provided.",
+    )
+    parser.add_argument(
+        "--experiment-id",
+        default=None,
+        help="Optional experiment id to attach to the report and default artifact filename.",
     )
     parser.add_argument(
         "--show-failures",
@@ -49,6 +61,22 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional list of review statuses to include, e.g. approved reviewed.",
     )
+    parser.add_argument(
+        "--reranker-type",
+        default=None,
+        help="Optional reranker override such as pass_through or cross_encoder.",
+    )
+    parser.add_argument(
+        "--reranker-model",
+        default=None,
+        help="Optional reranker model override for cross-encoder evaluation.",
+    )
+    parser.add_argument(
+        "--reranker-top-k",
+        type=int,
+        default=None,
+        help="Optional reranker top-k override.",
+    )
     return parser
 
 
@@ -57,12 +85,50 @@ def main() -> None:
     args = build_parser().parse_args()
     dataset_path = Path(args.dataset)
     dataset = EvaluationDataset.load(str(dataset_path))
+    generation_methods = {
+        str(sample.metadata.get("generation_method")).strip()
+        for sample in dataset.samples
+        if sample.metadata.get("generation_method") is not None
+    }
+    dataset_generation_method = None
+    if len(generation_methods) == 1:
+        dataset_generation_method = next(iter(generation_methods))
+    elif generation_methods:
+        dataset_generation_method = "mixed"
+    selected_review_statuses: list[str] | None = None
     if args.review_statuses is not None:
-        dataset = dataset.filtered(review_statuses={status.strip() for status in args.review_statuses})
+        selected_review_statuses = sorted({status.strip() for status in args.review_statuses})
+        dataset = dataset.filtered(review_statuses=set(selected_review_statuses))
     runner = RetrievalEvaluationRunner()
-    report = runner.run(dataset, task=args.task, k_values=args.k_values)
+    report = runner.run(
+        dataset,
+        task=args.task,
+        k_values=args.k_values,
+        reranker_type=args.reranker_type,
+        reranker_model=args.reranker_model,
+        reranker_top_k=args.reranker_top_k,
+        extra_config={
+            "experiment_id": args.experiment_id,
+            "dataset_path": str(dataset_path),
+            "dataset_name": dataset_path.name,
+            "dataset_generation_method": dataset_generation_method,
+            "review_statuses": selected_review_statuses,
+        },
+    )
 
-    output_path = Path(args.output) if args.output else dataset_path.with_suffix(".report.json")
+    if args.output:
+        output_path = Path(args.output)
+    else:
+        artifact_dir = Path(args.artifact_dir)
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        experiment_id = args.experiment_id or timestamp
+        retrieval_mode = str(report.config.get("retrieval_mode", "unknown"))
+        reranker_type = str(report.config.get("reranker_type", "unknown"))
+        dataset_stem = dataset_path.stem.replace(" ", "_")
+        output_path = artifact_dir / (
+            f"{experiment_id}_{args.task}_{dataset_stem}_{retrieval_mode}_{reranker_type}.report.json"
+        )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(report.to_dict(), indent=2), encoding="utf-8")
 

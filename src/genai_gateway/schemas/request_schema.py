@@ -21,6 +21,10 @@ class QueryRequest(BaseModel):
         default=settings.default_prompt_version,
         description="Prompt version identifier for the selected task.",
     )
+    retrieval_mode: str | None = Field(
+        default=None,
+        description="Optional retrieval-mode override such as dense, lexical, or hybrid.",
+    )
     top_k: int | None = Field(default=None, ge=1, le=20, description="Override retrieval result count.")
     reranker_type: str | None = Field(
         default=None,

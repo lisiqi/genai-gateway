@@ -67,6 +67,36 @@ It stores persistent data in tables. In this project, that includes or will incl
 
 You can think of Postgres as the source of truth for the platform state.
 
+### Postgres As More Than A Simple Database
+
+In this repo, Postgres is not used only as a relational row store.
+
+It also provides several platform capabilities that would otherwise require extra infrastructure.
+
+In practice, Postgres is handling:
+
+- transactional application storage
+- JSON metadata storage
+- vector search through `pgvector`
+- lexical full-text search through Postgres FTS
+- indexing for retrieval and application queries
+- schema evolution through Alembic-managed migrations
+
+That is one reason it is such a strong fit here.
+
+It lets the project support:
+
+- prompt/version state
+- request and evaluation records
+- retrieval chunks and embeddings
+- hybrid retrieval experiments
+
+without immediately introducing a separate vector database or a separate lexical search engine.
+
+This does not mean Postgres is always the best long-term answer for every workload.
+
+It does mean that for an MVP or learning-oriented GenAI platform, Postgres can cover much more architectural ground than people often assume.
+
 ### 2. pgvector
 
 `pgvector` is a Postgres extension for vector storage and similarity search.

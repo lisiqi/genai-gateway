@@ -32,6 +32,10 @@ The output should be:
 - a JSONL dataset of questions and relevant chunk IDs
 - a JSON report with aggregate metrics and per-sample retrieval results
 
+By default, retrieval-evaluation reports are saved as timestamped artifacts under:
+
+- `artifacts/retrieval_eval/`
+
 ## Dataset Schema
 
 Each sample contains:
@@ -295,6 +299,12 @@ The retrieval runner:
 4. computes IR metrics
 5. writes a JSON report
 
+The report includes:
+
+- aggregate metrics
+- per-sample retrieval results
+- run config such as retrieval mode, retrieval settings, embedding backend, dataset path, dataset generation method, and review-status filter
+
 If you want to evaluate only curated samples, run the harness against selected review statuses such as `approved`.
 
 Current metrics include:
@@ -304,6 +314,118 @@ Current metrics include:
 - `recall@k`
 - `ndcg@k`
 - `mrr`
+
+## What The Main Metrics Mean
+
+### `hit_rate@k`
+
+`hit_rate@k` asks:
+
+- did at least one relevant chunk appear in the top `k` results?
+
+For one sample:
+
+- score = `1` if any relevant chunk is in the top `k`
+- score = `0` otherwise
+
+The reported value is the average of that score across all samples.
+
+So:
+
+- `hit_rate@1` checks whether the first result is relevant
+- `hit_rate@3` checks whether at least one relevant chunk appears in the first three results
+
+### `mrr`
+
+`MRR` means `mean reciprocal rank`.
+
+For one sample:
+
+1. find the rank of the first relevant chunk
+2. compute `1 / rank`
+
+Examples:
+
+- first relevant chunk at rank 1 -> score = `1.0`
+- first relevant chunk at rank 2 -> score = `0.5`
+- first relevant chunk at rank 4 -> score = `0.25`
+- no relevant chunk retrieved -> score = `0.0`
+
+The reported `mrr` is the average of those per-sample scores.
+
+So `mrr` rewards getting the first relevant chunk as close to the top as possible.
+
+### `precision@k`
+
+`precision@k` asks:
+
+- among the top `k` retrieved chunks, what fraction are relevant?
+
+For one sample:
+
+```text
+precision@k = relevant_in_top_k / k
+```
+
+This is useful when you want to know how much irrelevant context is entering the prompt.
+
+### `recall@k`
+
+`recall@k` asks:
+
+- among all relevant chunks for the sample, what fraction were retrieved in the top `k`?
+
+For one sample:
+
+```text
+recall@k = relevant_in_top_k / total_relevant_chunks
+```
+
+This matters more when a question genuinely depends on multiple relevant chunks.
+
+### `ndcg@k`
+
+`nDCG` means `normalized discounted cumulative gain`.
+
+It rewards ranking relevant chunks near the top, but gives less credit as they appear lower in the list.
+
+The rough intuition is:
+
+- relevant chunk at rank 1 gets strong credit
+- relevant chunk at rank 2 or 3 still gets credit, but less
+- relevant chunk at rank 10 counts much less
+
+`nDCG` is normalized so the score is between `0` and `1`, where:
+
+- `1.0` means the ranking is ideal up to `k`
+- lower values mean relevant chunks are missing or placed too low
+
+This makes `nDCG@k` useful when you care about ranking quality across several positions, not only the first hit.
+
+## How To Interpret The Metrics For This Repo
+
+For this legal RAG setup, precision-oriented and rank-oriented metrics are usually more important than raw recall.
+
+That is because:
+
+- the model only sees a small number of retrieved chunks
+- the first few chunks have the strongest effect on the final answer
+- irrelevant chunks in a small context window can directly hurt answer quality
+
+So the most useful metrics to prioritize are usually:
+
+- `mrr`
+- `hit_rate@1`
+- `hit_rate@3`
+- `ndcg@3` or `ndcg@5`
+- `precision@k`
+
+`recall@k` is still useful, but it is usually secondary in this repo unless the benchmark contains many multi-evidence questions.
+
+A practical rule of thumb is:
+
+- for single-hop or single-evidence RAG, rank and precision matter most
+- for multi-hop or multi-evidence retrieval, recall becomes more important
 
 ## What This Lets Us Compare
 
@@ -332,3 +454,88 @@ But those signals do not replace retrieval evaluation.
 Retrieval evaluation remains the right tool when the question is:
 
 - is the retriever finding the right evidence?
+
+## Retrieval Mode Findings
+
+The repo also has concrete retrieval-only results comparing:
+
+- `dense`
+- `lexical`
+- `hybrid`
+
+For experiment `20260326T184946Z`, these modes were evaluated on both the `heuristic` and `llm` benchmark datasets.
+
+### Heuristic Benchmark
+
+On the heuristic benchmark:
+
+- `dense`: `hit_rate@1 = 0.1700`, `hit_rate@3 = 0.5700`, `mrr = 0.3995`, `precision@1 = 0.1700`, `precision@3 = 0.1900`
+- `lexical`: `hit_rate@1 = 0.9400`, `hit_rate@3 = 0.9600`, `mrr = 0.9483`, `precision@1 = 0.9400`, `precision@3 = 0.3200`
+- `hybrid`: `hit_rate@1 = 0.8800`, `hit_rate@3 = 0.9500`, `mrr = 0.9167`, `precision@1 = 0.8800`, `precision@3 = 0.3167`
+
+This strongly favors lexical retrieval and shows that the heuristic benchmark aligns closely with article-aware and term-aware retrieval.
+
+### LLM Benchmark
+
+On the LLM-authored benchmark:
+
+- `dense`: `hit_rate@1 = 0.6500`, `hit_rate@3 = 0.8600`, `mrr = 0.7631`, `precision@1 = 0.6500`, `precision@3 = 0.2867`
+- `lexical`: `hit_rate@1 = 0.3900`, `hit_rate@3 = 0.5700`, `mrr = 0.4932`, `precision@1 = 0.3900`, `precision@3 = 0.1900`
+- `hybrid`: `hit_rate@1 = 0.6100`, `hit_rate@3 = 0.8900`, `mrr = 0.7587`, `precision@1 = 0.6100`, `precision@3 = 0.2967`
+
+This favors dense retrieval for top-rank precision, while hybrid slightly improves broader coverage metrics such as `hit_rate@3` and `precision@3`.
+
+### Practical Interpretation
+
+These results are useful because they show that benchmark choice changes the architectural conclusion:
+
+- the heuristic benchmark strongly rewards lexical and article-aware retrieval
+- the LLM benchmark still prefers dense retrieval for rank quality at the top
+- hybrid retrieval is a sensible platform default because it supports both signals, but it should still be validated empirically rather than assumed to be best in every case
+
+The saved comparison artifact for this experiment is:
+
+- `artifacts/retrieval_eval_comparisons/20260326T184946Z.comparison.json`
+
+## Retrieval And Reranking Findings
+
+The repo now has concrete evidence that reranking can materially improve results, but the effect depends on the benchmark.
+
+For experiment `20260326T190834Z`, hybrid retrieval was evaluated with:
+
+- `pass_through`
+- `cross_encoder`
+
+using both the `heuristic` and `llm` benchmark datasets.
+
+### Heuristic Benchmark
+
+On the heuristic benchmark, cross-encoder reranking slightly hurt hybrid retrieval:
+
+- `pass_through`: `hit_rate@1 = 0.8800`, `hit_rate@3 = 0.9500`, `mrr = 0.9167`, `precision@1 = 0.8800`, `precision@3 = 0.3167`
+- `cross_encoder`: `hit_rate@1 = 0.8500`, `hit_rate@3 = 0.9300`, `mrr = 0.8927`, `precision@1 = 0.8500`, `precision@3 = 0.3100`
+
+This suggests the heuristic benchmark already aligns strongly with the first-stage article-aware retrieval stack, so reranking adds little and can reshuffle good candidates in the wrong direction.
+
+### LLM Benchmark
+
+On the LLM-authored benchmark, cross-encoder reranking improved hybrid retrieval substantially:
+
+- `pass_through`: `hit_rate@1 = 0.6100`, `hit_rate@3 = 0.8900`, `mrr = 0.7587`, `precision@1 = 0.6100`, `precision@3 = 0.2967`
+- `cross_encoder`: `hit_rate@1 = 0.8700`, `hit_rate@3 = 0.9700`, `mrr = 0.9144`, `precision@1 = 0.8700`, `precision@3 = 0.3233`
+
+This is strong evidence that reranking adds real value for more natural question phrasing, where first-stage retrieval still benefits from a stronger semantic ordering pass.
+
+### Practical Interpretation
+
+For this repo, the current evidence supports:
+
+- keeping reranking configurable rather than assuming it is always beneficial
+- treating `cross_encoder` as a high-quality option rather than a universal runtime default
+- recognizing that reranking improves answer quality at the cost of additional latency
+
+The demo UI therefore exposes reranking as an explicit choice, and it is reasonable to default the UI to `Cross-encoder` for showcase purposes while still keeping the latency tradeoff visible.
+
+The saved comparison artifact for this experiment is:
+
+- `artifacts/retrieval_eval_comparisons/20260326T190834Z.comparison.json`

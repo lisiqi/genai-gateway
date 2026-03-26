@@ -10,5 +10,6 @@ class RuntimeContext:
     task: str
     quality_mode: str
     prompt_version: str
+    retrieval_mode: str | None = None
     top_k: int | None = None
     reranker_type: str | None = None

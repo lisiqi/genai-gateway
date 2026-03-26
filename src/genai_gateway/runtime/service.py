@@ -18,6 +18,7 @@ class RuntimeService:
             task=request.task,
             quality_mode=request.quality_mode,
             prompt_version=request.prompt_version,
+            retrieval_mode=request.retrieval_mode,
             top_k=request.top_k,
             reranker_type=request.reranker_type,
         )

@@ -53,9 +53,13 @@ class RagWorkflow:
             lambda: self.retrieval_service.retrieve(
                 question=request.question,
                 task=context.task,
+                retrieval_mode=context.retrieval_mode,
                 top_k=context.top_k,
             ),
-            metadata={"top_k": context.top_k},
+            metadata={
+                "top_k": context.top_k,
+                "retrieval_mode": self.retrieval_service.resolve_retrieval_mode(context.retrieval_mode),
+            },
         )
         reranker = get_reranker(reranker_type=context.reranker_type)
         reranked, _ = tracer.measure(

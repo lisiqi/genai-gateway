@@ -53,6 +53,8 @@ Run offline retrieval evaluation:
 uv run python scripts/run_retrieval_eval.py --task legal_qa --dataset apps/legal_doc_qa/data/eval/legal_qa_retrieval_samples.heuristic.jsonl
 ```
 
+This writes a timestamped JSON report under `artifacts/retrieval_eval/` by default.
+
 Review generated retrieval samples:
 
 ```bash
@@ -76,3 +78,25 @@ Run retrieval evaluation only on curated samples:
 ```bash
 uv run python scripts/run_retrieval_eval.py --task legal_qa --dataset apps/legal_doc_qa/data/eval/legal_qa_retrieval_samples.heuristic.jsonl --review-statuses approved reviewed
 ```
+
+Run the full 6-run retrieval-evaluation matrix:
+
+```bash
+bash scripts/run_retrieval_eval_matrix.sh
+```
+
+Run the hybrid retrieval + reranker comparison matrix:
+
+```bash
+bash scripts/run_retrieval_reranker_eval_matrix.sh
+```
+
+Compare one matrix run by experiment id:
+
+```bash
+uv run python scripts/compare_retrieval_eval_reports.py --experiment-id 20260326T183708Z
+```
+
+This also saves a comparison artifact under `artifacts/retrieval_eval_comparisons/`.
+
+The default table includes precision metrics as well as `mrr`, `hit_rate`, and `ndcg`.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 from genai_gateway.evaluation.retrieval import (
     CorpusChunk,
@@ -33,6 +34,22 @@ class FakeChatProvider:
 
     def generate(self, prompt: str, question: str) -> tuple[str, TokenUsage]:
         return self.answer, TokenUsage(prompt_tokens=12, completion_tokens=7, total_tokens=19)
+
+
+class FakeReranker:
+    def __init__(self, rerank_fn=None) -> None:
+        self._rerank_fn = rerank_fn or (lambda question, chunks: chunks)
+
+    def rerank(self, question: str, chunks: list[dict]) -> list[dict]:
+        return self._rerank_fn(question, chunks)
+
+    @property
+    def config_summary(self) -> dict:
+        return {
+            "reranker_type": "fake",
+            "reranker_model": None,
+            "reranker_top_k": None,
+        }
 
 
 class TestEvaluationDataset:
@@ -159,3 +176,33 @@ class TestRetrievalEvaluationRunner:
         assert report.aggregate["hit_rate@1"] == 0.0
         assert report.aggregate["hit_rate@2"] == 1.0
         assert report.aggregate["mrr"] == 0.5
+
+    def test_runner_can_evaluate_reranked_results(self) -> None:
+        dataset = EvaluationDataset(
+            samples=[
+                EvaluationSample(
+                    question="Q1",
+                    relevant_chunk_ids=["doc::chunk::1"],
+                )
+            ]
+        )
+        runner = RetrievalEvaluationRunner(
+            retrieval_service=FakeRetrievalService(
+                {
+                    "Q1": [
+                        {"chunk_id": "doc::chunk::9", "content": "wrong"},
+                        {"chunk_id": "doc::chunk::1", "content": "right"},
+                    ]
+                }
+            )
+        )
+
+        def rerank_fn(question: str, chunks: list[dict]) -> list[dict]:
+            return [chunks[1], chunks[0]]
+
+        with patch("genai_gateway.evaluation.retrieval.harness.get_reranker", return_value=FakeReranker(rerank_fn)):
+            report = runner.run(dataset, task="legal_qa", k_values=[1, 2], reranker_type="cross_encoder")
+
+        assert report.aggregate["hit_rate@1"] == 1.0
+        assert report.aggregate["mrr"] == 1.0
+        assert report.config["reranker_type"] == "fake"

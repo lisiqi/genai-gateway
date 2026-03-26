@@ -34,7 +34,12 @@ class Settings(BaseSettings):
     prompt_root: str = "apps/legal_doc_qa/backend/prompts"
     default_task: str = "legal_qa"
     default_prompt_version: str = "v1"
+    retrieval_query_builders_json: str = ""
+    retrieval_mode: str = "hybrid"
     retrieval_top_k: int = 4
+    retrieval_dense_top_k: int = 12
+    retrieval_lexical_top_k: int = 12
+    retrieval_rrf_k: int = 60
     reranker_type: str = "pass_through"
     reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     reranker_top_k: int | None = None

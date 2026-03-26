@@ -17,6 +17,7 @@ class LegalDocQAService:
         question: str,
         quality_mode: str = "default",
         prompt_version: str = "v1",
+        retrieval_mode: str | None = None,
         top_k: int | None = None,
         reranker_type: str | None = None,
     ) -> QueryResponse:
@@ -26,6 +27,7 @@ class LegalDocQAService:
             task="legal_qa",
             quality_mode=quality_mode,
             prompt_version=prompt_version,
+            retrieval_mode=retrieval_mode,
             top_k=top_k,
             reranker_type=reranker_type,
         )

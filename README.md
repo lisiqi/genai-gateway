@@ -614,6 +614,22 @@ Run offline retrieval evaluation against that dataset:
 uv run python scripts/run_retrieval_eval.py --task legal_qa --dataset apps/legal_doc_qa/data/eval/legal_qa_retrieval_samples.heuristic.jsonl
 ```
 
+By default, the runner now writes a timestamped report under:
+
+```text
+artifacts/retrieval_eval/
+```
+
+The saved JSON report includes aggregate metrics, per-sample results, and run config such as:
+
+- retrieval mode
+- dense / lexical candidate pool settings
+- RRF setting
+- embedding provider and model
+- dataset path
+- dataset generation method
+- review-status filter
+
 Review generated samples before treating them as benchmark ground truth:
 
 ```bash
@@ -626,6 +642,66 @@ Run retrieval evaluation only on reviewed or approved samples:
 
 ```bash
 uv run python scripts/run_retrieval_eval.py --task legal_qa --dataset apps/legal_doc_qa/data/eval/legal_qa_retrieval_samples.heuristic.jsonl --review-statuses approved reviewed
+```
+
+Run the full 6-run matrix across:
+
+- `heuristic` and `llm` datasets
+- `dense`, `lexical`, and `hybrid` retrieval modes
+
+```bash
+bash scripts/run_retrieval_eval_matrix.sh
+```
+
+Run the hybrid retrieval + reranker comparison matrix:
+
+```bash
+bash scripts/run_retrieval_reranker_eval_matrix.sh
+```
+
+The matrix script assigns one shared experiment id to all 6 runs and prints it before starting.
+
+Compare one experiment directly:
+
+```bash
+uv run python scripts/compare_retrieval_eval_reports.py --experiment-id 20260326T183708Z
+```
+
+This also saves a comparison artifact under:
+
+```text
+artifacts/retrieval_eval_comparisons/
+```
+
+By default, the comparison table includes:
+
+- `hit_rate@1`
+- `hit_rate@3`
+- `mrr`
+- `ndcg@3`
+- `precision@1`
+- `precision@3`
+
+Retrieval defaults to hybrid search using:
+
+- dense vector retrieval with `pgvector`
+- lexical retrieval with Postgres full-text search
+- reciprocal rank fusion before optional reranking
+
+Relevant settings in `.env`:
+
+```env
+RETRIEVAL_MODE=hybrid
+RETRIEVAL_TOP_K=4
+RETRIEVAL_DENSE_TOP_K=12
+RETRIEVAL_LEXICAL_TOP_K=12
+RETRIEVAL_RRF_K=60
+```
+
+Apply the FTS index migration before using lexical or hybrid retrieval:
+
+```bash
+uv run alembic upgrade head
 ```
 
 Run the dashboard:
@@ -685,6 +761,7 @@ This repository also captures design decisions as lightweight ADRs in `docs/adr/
 - [ADR 005: Reranking architecture](docs/adr/005-reranking-architecture.md)
 - [ADR 006: Embedding backend strategy](docs/adr/006-embedding-backend-strategy.md)
 - [ADR 007: Offline retrieval evaluation workflow](docs/adr/007-offline-retrieval-evaluation-workflow.md)
+- [ADR 008: Hybrid retrieval architecture](docs/adr/008-hybrid-retrieval-architecture.md)
 
 ## Learning Notes
 
@@ -697,6 +774,7 @@ Longer explanatory notes live in `docs/learning-notes/`.
 - [Evaluation architecture](docs/learning-notes/evaluation-architecture.md)
 - [PDF extraction strategy](docs/learning-notes/pdf-extraction-strategy.md)
 - [Retrieval evaluation workflow](docs/learning-notes/retrieval-evaluation-workflow.md)
+- [Retrieval architecture](docs/learning-notes/retrieval-architecture.md)
 - [Embedding backend strategy](docs/learning-notes/embedding-backend-strategy.md)
 - [Model routing policy](docs/learning-notes/model-routing-policy.md)
 - [Observability and cost accounting](docs/learning-notes/observability-and-cost-accounting.md)
