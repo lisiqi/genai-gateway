@@ -762,6 +762,7 @@ This repository also captures design decisions as lightweight ADRs in `docs/adr/
 - [ADR 006: Embedding backend strategy](docs/adr/006-embedding-backend-strategy.md)
 - [ADR 007: Offline retrieval evaluation workflow](docs/adr/007-offline-retrieval-evaluation-workflow.md)
 - [ADR 008: Hybrid retrieval architecture](docs/adr/008-hybrid-retrieval-architecture.md)
+- [ADR 009: Runtime guardrails](docs/adr/009-runtime-guardrails.md)
 
 ## Learning Notes
 
@@ -772,6 +773,7 @@ Longer explanatory notes live in `docs/learning-notes/`.
 - [Database stack](docs/learning-notes/database-stack.md)
 - [Chunking logic](docs/learning-notes/chunking-logic.md)
 - [Evaluation architecture](docs/learning-notes/evaluation-architecture.md)
+- [Guardrails](docs/learning-notes/guardrails.md)
 - [PDF extraction strategy](docs/learning-notes/pdf-extraction-strategy.md)
 - [Retrieval evaluation workflow](docs/learning-notes/retrieval-evaluation-workflow.md)
 - [Retrieval architecture](docs/learning-notes/retrieval-architecture.md)

@@ -58,6 +58,15 @@ class RerankingSummary(BaseModel):
     reranker_top_k: int | None = None
 
 
+class GuardrailSummary(BaseModel):
+    """Guardrail decisions taken during request processing."""
+
+    scope_status: str
+    evidence_status: str | None = None
+    abstained: bool = False
+    reason: str | None = None
+
+
 class TraceEvent(BaseModel):
     """One stage-level trace event."""
 
@@ -85,5 +94,6 @@ class QueryResponse(BaseModel):
     token_usage: TokenUsage
     routing: RoutingSummary
     reranking: RerankingSummary
+    guardrails: GuardrailSummary
     trace: TraceSummary
     evaluation: EvaluationSummary

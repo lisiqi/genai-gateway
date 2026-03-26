@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     retrieval_dense_top_k: int = 12
     retrieval_lexical_top_k: int = 12
     retrieval_rrf_k: int = 60
+    guardrails_enabled: bool = True
     reranker_type: str = "pass_through"
     reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     reranker_top_k: int | None = None

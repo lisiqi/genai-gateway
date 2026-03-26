@@ -1,5 +1,6 @@
 """RAG workflow implementation for the runtime layer."""
 
+from genai_gateway.config.settings import get_settings
 from genai_gateway.evaluation.latency import measure_latency_ms
 from genai_gateway.evaluation.pricing import compute_request_cost
 from genai_gateway.evaluation.response import (
@@ -14,11 +15,13 @@ from genai_gateway.prompts.manager import PromptManager
 from genai_gateway.providers.chat import get_chat_provider
 from genai_gateway.retrieval.reranker import get_reranker
 from genai_gateway.retrieval.retriever import RetrievalService
+from genai_gateway.runtime.guardrails import assess_retrieval_evidence, classify_request_scope
 from genai_gateway.runtime.context import RuntimeContext
 from genai_gateway.runtime.policies.model_routing import ModelRoutingPolicy
 from genai_gateway.schemas.request_schema import QueryRequest
 from genai_gateway.schemas.response_schema import (
     EvaluationSummary,
+    GuardrailSummary,
     QueryResponse,
     RetrievedChunk,
     RerankingSummary,
@@ -32,6 +35,7 @@ class RagWorkflow:
     """Coordinates the current retrieve -> rerank -> prompt -> generate flow."""
 
     def __init__(self) -> None:
+        self.settings = get_settings()
         self.prompt_manager = PromptManager()
         self.retrieval_service = RetrievalService()
         self.model_routing_policy = ModelRoutingPolicy()
@@ -40,6 +44,29 @@ class RagWorkflow:
     def run(self, request: QueryRequest, context: RuntimeContext) -> QueryResponse:
         """Execute the RAG workflow."""
         tracer = TraceRecorder()
+        reranker = get_reranker(reranker_type=context.reranker_type)
+        if self.settings.guardrails_enabled:
+            scope_decision, _ = tracer.measure(
+                "guardrail.scope",
+                lambda: classify_request_scope(question=request.question, task=context.task),
+                metadata={"task": context.task},
+            )
+            if scope_decision.status != "in_scope":
+                response = self._build_abstention_response(
+                    context=context,
+                    tracer=tracer,
+                    answer=(
+                        "This assistant only answers questions grounded in the ingested legal document. "
+                        "Ask about the Digital Services Act or a specific article, clause, or legal concept in the corpus."
+                    ),
+                    reranker=reranker,
+                    scope_status=scope_decision.status,
+                    evidence_status=None,
+                    reason=scope_decision.reason,
+                )
+                self.request_logger.log(request=request, response=response)
+                return response
+
         prompt_text, _ = tracer.measure(
             "prompt.load",
             lambda: self.prompt_manager.load_prompt(
@@ -61,7 +88,6 @@ class RagWorkflow:
                 "retrieval_mode": self.retrieval_service.resolve_retrieval_mode(context.retrieval_mode),
             },
         )
-        reranker = get_reranker(reranker_type=context.reranker_type)
         reranked, _ = tracer.measure(
             "retrieval.rerank",
             lambda: reranker.rerank(
@@ -73,6 +99,28 @@ class RagWorkflow:
                 "reranker_type": reranker.config_summary["reranker_type"],
             },
         )
+        if self.settings.guardrails_enabled:
+            evidence_decision, _ = tracer.measure(
+                "guardrail.evidence",
+                lambda: assess_retrieval_evidence(question=request.question, retrieved_chunks=reranked),
+                metadata={"retrieved_count": len(reranked)},
+            )
+            if evidence_decision.status != "sufficient":
+                response = self._build_abstention_response(
+                    context=context,
+                    tracer=tracer,
+                    answer=(
+                        "I can't answer that confidently from the retrieved sections of this legal document. "
+                        "Try naming the relevant article, clause, or concept more explicitly."
+                    ),
+                    reranker=reranker,
+                    scope_status="in_scope",
+                    evidence_status=evidence_decision.status,
+                    reason=evidence_decision.reason,
+                    retrieved_chunks=reranked,
+                )
+                self.request_logger.log(request=request, response=response)
+                return response
         routing_decision, _ = tracer.measure(
             "routing.select",
             lambda: self.model_routing_policy.select(
@@ -184,6 +232,12 @@ class RagWorkflow:
                 reason=routing_decision.reason,
             ),
             reranking=RerankingSummary(**reranker.config_summary),
+            guardrails=GuardrailSummary(
+                scope_status="in_scope",
+                evidence_status="sufficient",
+                abstained=False,
+                reason=None,
+            ),
             trace=TraceSummary(
                 events=[TraceEvent.model_validate(event) for event in tracer.as_list()],
             ),
@@ -207,3 +261,55 @@ class RagWorkflow:
         )
         self.request_logger.log(request=request, response=response)
         return response
+
+    def _build_abstention_response(
+        self,
+        *,
+        context: RuntimeContext,
+        tracer: TraceRecorder,
+        answer: str,
+        reranker,
+        scope_status: str,
+        evidence_status: str | None,
+        reason: str,
+        retrieved_chunks: list[dict] | None = None,
+    ) -> QueryResponse:
+        """Build a controlled abstention response for guardrail blocks."""
+        return QueryResponse(
+            answer=answer,
+            task=context.task,
+            quality_mode=context.quality_mode,
+            prompt_version=context.prompt_version,
+            model_name=None,
+            retrieved_chunks=[RetrievedChunk.model_validate(chunk) for chunk in (retrieved_chunks or [])],
+            latency_ms=0.0,
+            token_usage={"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+            routing=RoutingSummary(
+                selected_provider="guardrail",
+                selected_model="guardrail",
+                fallback_used=False,
+                fallback_provider=None,
+                fallback_model=None,
+                reason=reason,
+            ),
+            reranking=RerankingSummary(**reranker.config_summary),
+            guardrails=GuardrailSummary(
+                scope_status=scope_status,
+                evidence_status=evidence_status,
+                abstained=True,
+                reason=reason,
+            ),
+            trace=TraceSummary(events=[TraceEvent.model_validate(event) for event in tracer.as_list()]),
+            evaluation=EvaluationSummary(
+                groundedness_score=0.0,
+                answer_relevance_score=0.0,
+                citation_score=0.0,
+                completeness_score=0.0,
+                estimated_cost_usd=0.0,
+                input_cost_usd=0.0,
+                output_cost_usd=0.0,
+                pricing_source=None,
+                cost_is_estimated=True,
+                routing_notes=reason,
+            ),
+        )

@@ -135,6 +135,12 @@ if st.button("Ask", type="primary", use_container_width=True):
         else:
             result = payload["result"]
             st.subheader("Answer")
+            guardrails = result.get("guardrails", {})
+            if guardrails.get("abstained"):
+                st.warning(
+                    "Guardrail abstention: "
+                    + (guardrails.get("reason") or "request blocked before generation")
+                )
             st.write(result["answer"])
 
             col1, col2, col3, col4 = st.columns(4)
@@ -169,6 +175,13 @@ if st.button("Ask", type="primary", use_container_width=True):
                     else ""
                 )
             )
+            if guardrails:
+                st.caption(
+                    "Guardrails: "
+                    f"scope={guardrails.get('scope_status')} | "
+                    f"evidence={guardrails.get('evidence_status') or 'n/a'} | "
+                    f"abstained={guardrails.get('abstained')}"
+                )
             if route.get("fallback_used"):
                 st.warning(
                     "Fallback used: "
