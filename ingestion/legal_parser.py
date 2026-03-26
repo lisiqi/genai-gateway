@@ -8,21 +8,6 @@ import re
 
 ARTICLE_HEADING_RE = re.compile(r"^Article\s+(\d+[A-Za-z]?)\s*$", re.MULTILINE)
 CLAUSE_RE = re.compile(r"^\s*(\d+)\.\s", re.MULTILINE)
-NON_MERGE_TITLE_TOKENS = {
-    "a",
-    "an",
-    "and",
-    "by",
-    "for",
-    "in",
-    "no",
-    "of",
-    "on",
-    "or",
-    "the",
-    "to",
-    "with",
-}
 
 
 @dataclass(slots=True)
@@ -62,89 +47,6 @@ def normalize_legal_text(text: str) -> str:
     normalized = re.sub(r"[ \t]+\n", "\n", normalized)
     return normalized
 
-
-def repair_fragmented_heading_text(text: str) -> str:
-    """Repair common PDF extraction word splits in short heading/title text."""
-    tokens = _split_glued_title_stopword_prefixes(text.split())
-    if len(tokens) < 2:
-        return text.strip()
-
-    repaired = _merge_fragmented_title_tokens(tokens)
-    return " ".join(repaired).strip()
-
-
-def _merge_fragmented_title_tokens(tokens: list[str]) -> list[str]:
-    """Apply conservative title-token repair rules in a single left-to-right pass."""
-    merged: list[str] = []
-    index = 0
-    while index < len(tokens):
-        if index + 2 < len(tokens):
-            merged_triplet = _try_merge_title_triplet(tokens[index], tokens[index + 1], tokens[index + 2])
-            if merged_triplet is not None:
-                merged.append(merged_triplet)
-                index += 3
-                continue
-
-        current = tokens[index]
-        if index == len(tokens) - 1:
-            merged.append(current)
-            break
-
-        following = tokens[index + 1]
-        current_clean = re.sub(r"^[^A-Za-z]+|[^A-Za-z-]+$", "", current)
-        following_clean = re.sub(r"^[^A-Za-z]+|[^A-Za-z-]+$", "", following)
-
-        should_merge = False
-        if current_clean and following_clean:
-            current_lower = current_clean.lower()
-            if current_lower not in NON_MERGE_TITLE_TOKENS:
-                if len(current_clean) == 1 and current_clean[:1].isupper() and following_clean[:1].islower():
-                    should_merge = True
-                elif len(following_clean) == 1 and following_clean.lower() not in NON_MERGE_TITLE_TOKENS and current_clean[-1:].isalpha():
-                    should_merge = True
-                elif 2 <= len(current_clean) <= 3 and len(following_clean) >= 4 and following_clean[:1].islower():
-                    should_merge = True
-                elif "-" in current_clean and re.search(r"-[A-Za-z]$", current_clean) and len(following_clean) >= 4:
-                    should_merge = True
-
-        if should_merge:
-            merged.append(f"{current}{following}")
-            index += 2
-            continue
-
-        merged.append(current)
-        index += 1
-
-    return merged
-
-
-def _try_merge_title_triplet(first: str, second: str, third: str) -> str | None:
-    """Repair title-specific three-token word fragments."""
-    first_clean = re.sub(r"^[^A-Za-z]+|[^A-Za-z-]+$", "", first)
-    second_clean = re.sub(r"^[^A-Za-z]+|[^A-Za-z-]+$", "", second)
-    third_clean = re.sub(r"^[^A-Za-z]+|[^A-Za-z-]+$", "", third)
-    if not first_clean or not second_clean or not third_clean:
-        return None
-    if len(first_clean) >= 4 and len(second_clean) == 1 and len(third_clean) == 1:
-        return f"{first}{second}{third}"
-    return None
-
-
-def _split_glued_title_stopword_prefixes(tokens: list[str]) -> list[str]:
-    """Split tokens like 'Nogeneral' into 'No', 'general' for title lines."""
-    split_tokens: list[str] = []
-    for token in tokens:
-        matched = False
-        for prefix in ("No", "For", "In", "On", "Of", "The"):
-            if token.startswith(prefix) and len(token) > len(prefix) + 2 and token[len(prefix)].islower():
-                split_tokens.extend([prefix, token[len(prefix):]])
-                matched = True
-                break
-        if not matched:
-            split_tokens.append(token)
-    return split_tokens
-
-
 def parse_legal_structure(text: str) -> LegalDocumentStructure:
     """Parse article and clause structure from a legal-style document."""
     normalized = normalize_legal_text(text)
@@ -168,7 +70,7 @@ def parse_legal_structure(text: str) -> LegalDocumentStructure:
         title = ""
         body_lines = article_lines[1:]
         if body_lines and not CLAUSE_RE.match(body_lines[0]):
-            title = repair_fragmented_heading_text(body_lines[0])
+            title = body_lines[0].strip()
             body_lines = body_lines[1:]
 
         body_text = "\n".join(body_lines).strip()

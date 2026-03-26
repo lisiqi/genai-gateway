@@ -140,3 +140,7 @@ For the current implementation, this layer uses deterministic heuristic scores f
 - completeness
 
 These heuristics are intended as a transparent baseline and can later be replaced or complemented by LLM-as-a-judge evaluation.
+
+The concrete offline retrieval workflow is documented separately in:
+
+- `ADR 007: Offline Retrieval Evaluation Workflow`

@@ -590,6 +590,44 @@ Compare reranking on vs off in the same batch:
 uv run python scripts/run_experiment.py --reranker-types pass_through cross_encoder
 ```
 
+Generate a heuristic offline retrieval-evaluation dataset:
+
+```bash
+uv run python scripts/generate_retrieval_eval_dataset.py --max-samples 100
+```
+
+Generate an LLM-authored retrieval-evaluation dataset using the configured `legal_qa.cheap` route:
+
+```bash
+uv run python scripts/generate_retrieval_eval_dataset.py --generation-method llm --max-samples 100
+```
+
+Override the generation provider/model explicitly:
+
+```bash
+uv run python scripts/generate_retrieval_eval_dataset.py --generation-method llm --generation-provider openrouter --generation-model qwen/qwen3-next-80b-a3b-instruct
+```
+
+Run offline retrieval evaluation against that dataset:
+
+```bash
+uv run python scripts/run_retrieval_eval.py --task legal_qa --dataset apps/legal_doc_qa/data/eval/legal_qa_retrieval_samples.heuristic.jsonl
+```
+
+Review generated samples before treating them as benchmark ground truth:
+
+```bash
+uv run python scripts/review_retrieval_eval_dataset.py --dataset apps/legal_doc_qa/data/eval/legal_qa_retrieval_samples.heuristic.jsonl --summary
+uv run python scripts/review_retrieval_eval_dataset.py --dataset apps/legal_doc_qa/data/eval/legal_qa_retrieval_samples.heuristic.jsonl --index 0 --show
+uv run python scripts/review_retrieval_eval_dataset.py --dataset apps/legal_doc_qa/data/eval/legal_qa_retrieval_samples.heuristic.jsonl --index 0 --set-status approved
+```
+
+Run retrieval evaluation only on reviewed or approved samples:
+
+```bash
+uv run python scripts/run_retrieval_eval.py --task legal_qa --dataset apps/legal_doc_qa/data/eval/legal_qa_retrieval_samples.heuristic.jsonl --review-statuses approved reviewed
+```
+
 Run the dashboard:
 
 ```bash
@@ -646,6 +684,7 @@ This repository also captures design decisions as lightweight ADRs in `docs/adr/
 - [ADR 004: Model routing policy](docs/adr/004-model-routing-policy.md)
 - [ADR 005: Reranking architecture](docs/adr/005-reranking-architecture.md)
 - [ADR 006: Embedding backend strategy](docs/adr/006-embedding-backend-strategy.md)
+- [ADR 007: Offline retrieval evaluation workflow](docs/adr/007-offline-retrieval-evaluation-workflow.md)
 
 ## Learning Notes
 
@@ -656,6 +695,8 @@ Longer explanatory notes live in `docs/learning-notes/`.
 - [Database stack](docs/learning-notes/database-stack.md)
 - [Chunking logic](docs/learning-notes/chunking-logic.md)
 - [Evaluation architecture](docs/learning-notes/evaluation-architecture.md)
+- [PDF extraction strategy](docs/learning-notes/pdf-extraction-strategy.md)
+- [Retrieval evaluation workflow](docs/learning-notes/retrieval-evaluation-workflow.md)
 - [Embedding backend strategy](docs/learning-notes/embedding-backend-strategy.md)
 - [Model routing policy](docs/learning-notes/model-routing-policy.md)
 - [Observability and cost accounting](docs/learning-notes/observability-and-cost-accounting.md)

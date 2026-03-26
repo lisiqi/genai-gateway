@@ -19,6 +19,14 @@ class RetrievalEvaluationResult:
     retrieved_ids: list[str]
     metrics: dict[str, float]
 
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "question": self.question,
+            "relevant_chunk_ids": self.relevant_chunk_ids,
+            "retrieved_ids": self.retrieved_ids,
+            "metrics": self.metrics,
+        }
+
 
 @dataclass
 class RetrievalEvaluationReport:
@@ -29,6 +37,15 @@ class RetrievalEvaluationReport:
     n_samples: int
     k_values: list[int]
     config: dict[str, Any]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "results": [result.to_dict() for result in self.results],
+            "aggregate": self.aggregate,
+            "n_samples": self.n_samples,
+            "k_values": self.k_values,
+            "config": self.config,
+        }
 
 
 class RetrievalEvaluationRunner:

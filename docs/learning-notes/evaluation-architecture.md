@@ -199,3 +199,7 @@ They are not a substitute for stronger evaluation methods later. A future step c
 - stronger citation validation
 
 This order keeps the platform architecture clear and strengthens the showcase value of the repo.
+
+The concrete retrieval-evaluation workflow is described separately in:
+
+- `Learning Note: Retrieval Evaluation Workflow`

@@ -12,7 +12,7 @@ from genai_gateway.runtime.service import RuntimeService
 from genai_gateway.schemas.request_schema import QueryRequest
 
 
-DEFAULT_QUESTION_FILE = "apps/legal_doc_qa/data/eval/sample_questions.json"
+DEFAULT_QUESTION_FILE = "apps/legal_doc_qa/data/eval/experiment_questions.json"
 
 
 def build_parser() -> argparse.ArgumentParser:

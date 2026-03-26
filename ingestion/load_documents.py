@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import re
 
-from pypdf import PdfReader
+import fitz
 
 
 FRAGMENT_STOPWORDS = {
@@ -132,10 +132,10 @@ def _clean_alpha_token(token: str) -> str:
 def load_pdf_document(path: str) -> dict:
     """Extract text from a PDF file."""
     pdf_path = Path(path)
-    reader = PdfReader(str(pdf_path))
+    document = fitz.open(str(pdf_path))
     page_texts: list[str] = []
-    for page in reader.pages:
-        extracted = page.extract_text() or ""
+    for page in document:
+        extracted = page.get_text("text") or ""
         cleaned = extracted.strip()
         if cleaned:
             page_texts.append(cleaned)
@@ -144,5 +144,5 @@ def load_pdf_document(path: str) -> dict:
         "source": str(pdf_path),
         "title": pdf_path.stem,
         "content": normalize_extracted_pdf_text("\n\n".join(page_texts)),
-        "page_count": len(reader.pages),
+        "page_count": document.page_count,
     }

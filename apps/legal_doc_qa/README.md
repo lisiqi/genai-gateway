@@ -34,3 +34,45 @@ Run a comparison batch across prompt versions and quality modes:
 ```bash
 uv run python scripts/run_experiment.py
 ```
+
+Generate a retrieval-evaluation dataset from the ingested legal corpus:
+
+```bash
+uv run python scripts/generate_retrieval_eval_dataset.py --task legal_qa --max-samples 100
+```
+
+Use an LLM to generate more natural benchmark questions with the default `legal_qa.cheap` route:
+
+```bash
+uv run python scripts/generate_retrieval_eval_dataset.py --task legal_qa --generation-method llm --max-samples 100
+```
+
+Run offline retrieval evaluation:
+
+```bash
+uv run python scripts/run_retrieval_eval.py --task legal_qa --dataset apps/legal_doc_qa/data/eval/legal_qa_retrieval_samples.heuristic.jsonl
+```
+
+Review generated retrieval samples:
+
+```bash
+uv run python scripts/review_retrieval_eval_dataset.py --dataset apps/legal_doc_qa/data/eval/legal_qa_retrieval_samples.heuristic.jsonl --summary
+```
+
+Inspect one sample:
+
+```bash
+uv run python scripts/review_retrieval_eval_dataset.py --dataset apps/legal_doc_qa/data/eval/legal_qa_retrieval_samples.heuristic.jsonl --index 0 --show
+```
+
+Approve one sample:
+
+```bash
+uv run python scripts/review_retrieval_eval_dataset.py --dataset apps/legal_doc_qa/data/eval/legal_qa_retrieval_samples.heuristic.jsonl --index 0 --set-status approved
+```
+
+Run retrieval evaluation only on curated samples:
+
+```bash
+uv run python scripts/run_retrieval_eval.py --task legal_qa --dataset apps/legal_doc_qa/data/eval/legal_qa_retrieval_samples.heuristic.jsonl --review-statuses approved reviewed
+```
