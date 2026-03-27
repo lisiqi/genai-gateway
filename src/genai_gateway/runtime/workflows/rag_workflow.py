@@ -51,6 +51,11 @@ class RagWorkflow:
                 lambda: classify_request_scope(question=request.question, task=context.task),
                 metadata={"task": context.task},
             )
+            tracer.record(
+                stage="guardrail.scope.result",
+                duration_ms=0.0,
+                metadata={"status": scope_decision.status, "reason": scope_decision.reason},
+            )
             if scope_decision.status != "in_scope":
                 response = self._build_abstention_response(
                     context=context,
@@ -105,6 +110,11 @@ class RagWorkflow:
                 lambda: assess_retrieval_evidence(question=request.question, retrieved_chunks=reranked),
                 metadata={"retrieved_count": len(reranked)},
             )
+            tracer.record(
+                stage="guardrail.evidence.result",
+                duration_ms=0.0,
+                metadata={"status": evidence_decision.status, "reason": evidence_decision.reason},
+            )
             if evidence_decision.status != "sufficient":
                 response = self._build_abstention_response(
                     context=context,
@@ -147,7 +157,7 @@ class RagWorkflow:
         selected_model = routing_decision.model
         fallback_used = False
         try:
-            answer, usage, latency_ms = measure_latency_ms(
+            answer, usage, provider_metadata, latency_ms = measure_latency_ms(
                 lambda: chat_provider.generate(
                     prompt=final_prompt,
                     question=request.question,
@@ -156,7 +166,12 @@ class RagWorkflow:
             tracer.record(
                 stage="generation.primary",
                 duration_ms=latency_ms,
-                metadata={"provider": selected_provider, "model": selected_model},
+                metadata={
+                    "provider": selected_provider,
+                    "model": selected_model,
+                    "provider_reported_cost_usd": provider_metadata.provider_reported_cost_usd,
+                    "provider_generation_id": provider_metadata.provider_generation_id,
+                },
             )
         except Exception:
             if not routing_decision.fallback_provider:
@@ -168,7 +183,7 @@ class RagWorkflow:
                 provider_name=selected_provider,
                 model_name=selected_model,
             )
-            answer, usage, latency_ms = measure_latency_ms(
+            answer, usage, provider_metadata, latency_ms = measure_latency_ms(
                 lambda: fallback_provider.generate(
                     prompt=final_prompt,
                     question=request.question,
@@ -177,7 +192,12 @@ class RagWorkflow:
             tracer.record(
                 stage="generation.fallback",
                 duration_ms=latency_ms,
-                metadata={"provider": selected_provider, "model": selected_model},
+                metadata={
+                    "provider": selected_provider,
+                    "model": selected_model,
+                    "provider_reported_cost_usd": provider_metadata.provider_reported_cost_usd,
+                    "provider_generation_id": provider_metadata.provider_generation_id,
+                },
             )
         groundedness, _ = tracer.measure(
             "evaluation.groundedness",
@@ -251,6 +271,9 @@ class RagWorkflow:
                 output_cost_usd=cost_breakdown.output_cost_usd,
                 pricing_source=cost_breakdown.pricing_source,
                 cost_is_estimated=cost_breakdown.is_estimated,
+                provider_reported_cost_usd=provider_metadata.provider_reported_cost_usd,
+                provider_generation_id=provider_metadata.provider_generation_id,
+                provider_usage_source=provider_metadata.provider_usage_source,
                 routing_notes=(
                     f"Fallback used: {routing_decision.provider}/{routing_decision.model} -> "
                     f"{selected_provider}/{selected_model}"
@@ -310,6 +333,9 @@ class RagWorkflow:
                 output_cost_usd=0.0,
                 pricing_source=None,
                 cost_is_estimated=True,
+                provider_reported_cost_usd=None,
+                provider_generation_id=None,
+                provider_usage_source=None,
                 routing_notes=reason,
             ),
         )

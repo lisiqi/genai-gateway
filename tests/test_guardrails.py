@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from genai_gateway.runtime.guardrails import assess_retrieval_evidence, classify_request_scope
 from genai_gateway.runtime.workflows.rag_workflow import RagWorkflow
 from genai_gateway.schemas.request_schema import QueryRequest
-from genai_gateway.schemas.response_schema import TokenUsage
+from genai_gateway.schemas.response_schema import ProviderGenerationMetadata, TokenUsage
 
 
 class FakePromptManager:
@@ -47,7 +47,11 @@ class FakeLogger:
 
 class FakeChatProvider:
     def generate(self, prompt: str, question: str):
-        return "generated answer", TokenUsage(prompt_tokens=1, completion_tokens=1, total_tokens=2)
+        return (
+            "generated answer",
+            TokenUsage(prompt_tokens=1, completion_tokens=1, total_tokens=2),
+            ProviderGenerationMetadata(provider_usage_source="test"),
+        )
 
 
 class FakeReranker:

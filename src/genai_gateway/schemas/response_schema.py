@@ -24,6 +24,14 @@ class TokenUsage(BaseModel):
     total_tokens: int = Field(default=0)
 
 
+class ProviderGenerationMetadata(BaseModel):
+    """Optional provider-reported metadata for one generation call."""
+
+    provider_reported_cost_usd: float | None = None
+    provider_generation_id: str | None = None
+    provider_usage_source: str | None = None
+
+
 class EvaluationSummary(BaseModel):
     """Evaluation metrics captured for a request."""
 
@@ -36,6 +44,9 @@ class EvaluationSummary(BaseModel):
     output_cost_usd: float = 0.0
     pricing_source: str | None = None
     cost_is_estimated: bool = True
+    provider_reported_cost_usd: float | None = None
+    provider_generation_id: str | None = None
+    provider_usage_source: str | None = None
     routing_notes: str | None = None
 
 

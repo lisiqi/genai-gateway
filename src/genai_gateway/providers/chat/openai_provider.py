@@ -4,7 +4,7 @@ from openai import OpenAI
 
 from genai_gateway.config.settings import get_settings
 from genai_gateway.providers.chat.base import ChatProvider
-from genai_gateway.schemas.response_schema import TokenUsage
+from genai_gateway.schemas.response_schema import ProviderGenerationMetadata, TokenUsage
 
 
 class OpenAIChatProvider(ChatProvider):
@@ -20,7 +20,7 @@ class OpenAIChatProvider(ChatProvider):
         """Return the configured model for this provider."""
         return self._model_name or None
 
-    def generate(self, prompt: str, question: str) -> tuple[str, TokenUsage]:
+    def generate(self, prompt: str, question: str) -> tuple[str, TokenUsage, ProviderGenerationMetadata]:
         """Generate an answer and token usage information.
 
         Falls back to a deterministic stub when no API key is configured so the
@@ -31,7 +31,11 @@ class OpenAIChatProvider(ChatProvider):
                 "Model client is not configured yet. "
                 f"Question received: {question}"
             )
-            return answer, TokenUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0)
+            return (
+                answer,
+                TokenUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0),
+                ProviderGenerationMetadata(provider_usage_source="local stub"),
+            )
 
         response = self.client.responses.create(
             model=self._model_name,
@@ -39,8 +43,15 @@ class OpenAIChatProvider(ChatProvider):
         )
         usage = getattr(response, "usage", None)
         answer = response.output_text or "No response returned."
-        return answer, TokenUsage(
-            prompt_tokens=getattr(usage, "input_tokens", 0) or 0,
-            completion_tokens=getattr(usage, "output_tokens", 0) or 0,
-            total_tokens=getattr(usage, "total_tokens", 0) or 0,
+        return (
+            answer,
+            TokenUsage(
+                prompt_tokens=getattr(usage, "input_tokens", 0) or 0,
+                completion_tokens=getattr(usage, "output_tokens", 0) or 0,
+                total_tokens=getattr(usage, "total_tokens", 0) or 0,
+            ),
+            ProviderGenerationMetadata(
+                provider_generation_id=getattr(response, "id", None),
+                provider_usage_source="OpenAI Responses API usage",
+            ),
         )

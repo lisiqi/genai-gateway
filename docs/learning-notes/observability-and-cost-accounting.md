@@ -74,6 +74,8 @@ They answer questions like:
 
 Examples of trace stages in this repo:
 
+- `guardrail.scope`
+- `guardrail.evidence`
 - `prompt.load`
 - `retrieval.search`
 - `retrieval.rerank`
@@ -109,6 +111,14 @@ Each event stores:
 - stage name
 - duration in milliseconds
 - small metadata payload
+
+That metadata now also carries runtime inspection signals such as:
+
+- selected retrieval mode
+- guardrail scope status
+- guardrail evidence status
+
+This makes the lightweight Streamlit dashboard more useful without needing a separate observability backend.
 
 The trace is returned in the API response and persisted in `query_logs.trace_json`.
 
@@ -158,6 +168,12 @@ The result is stored as:
 
 These fields are persisted on `evaluations`.
 
+For OpenRouter, the runtime can now also capture provider-reported generation metadata when the API includes it, including:
+
+- provider-reported cost
+- provider generation id
+- usage source label
+
 ## Why This Is Better Than The Old Placeholder
 
 The earlier placeholder cost function ignored:
@@ -174,13 +190,18 @@ The current approach is still simple, but it is much closer to a real runtime:
 - dashboard comparisons now reflect route-specific pricing
 - request records contain enough information to explain cost outcomes
 
-## Important Limitation
+## Current OpenRouter Behavior
 
-For OpenRouter, the current implementation uses a price-card approach tied to the selected model.
+The runtime still computes a local estimated cost for all providers so there is always a comparable fallback.
 
-That is useful and much better than a placeholder, but it is still not the same as full post-hoc billing reconciliation.
+When a request goes through OpenRouter, the runtime now also stores provider-reported cost metadata when it is present in the API response.
 
-If exact provider-side billed cost is needed later, a stronger integration can be added.
+That means the system can keep:
+
+- estimated route cost from the local pricing registry
+- provider-reported cost from OpenRouter when available
+
+The dashboard prefers provider-reported cost for display when it exists, while still preserving the estimated values for cross-provider consistency.
 
 ## What A Future Step Might Add
 

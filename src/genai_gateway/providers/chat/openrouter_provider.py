@@ -4,7 +4,7 @@ from openai import OpenAI
 
 from genai_gateway.config.settings import get_settings
 from genai_gateway.providers.chat.base import ChatProvider
-from genai_gateway.schemas.response_schema import TokenUsage
+from genai_gateway.schemas.response_schema import ProviderGenerationMetadata, TokenUsage
 
 
 class OpenRouterChatProvider(ChatProvider):
@@ -33,7 +33,7 @@ class OpenRouterChatProvider(ChatProvider):
         """Return the configured OpenRouter model name."""
         return self._model_name or None
 
-    def generate(self, prompt: str, question: str) -> tuple[str, TokenUsage]:
+    def generate(self, prompt: str, question: str) -> tuple[str, TokenUsage, ProviderGenerationMetadata]:
         """Generate an answer through OpenRouter.
 
         Falls back to a deterministic stub when no API key is configured so the
@@ -44,7 +44,11 @@ class OpenRouterChatProvider(ChatProvider):
                 "OpenRouter chat provider is not configured yet. "
                 f"Question received: {question}"
             )
-            return answer, TokenUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0)
+            return (
+                answer,
+                TokenUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0),
+                ProviderGenerationMetadata(provider_usage_source="local stub"),
+            )
 
         response = self.client.chat.completions.create(
             model=self._model_name,
@@ -54,8 +58,19 @@ class OpenRouterChatProvider(ChatProvider):
         message = choice.message if choice is not None else None
         answer = (message.content if message else None) or "No response returned."
         usage = getattr(response, "usage", None)
-        return answer, TokenUsage(
-            prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
-            completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
-            total_tokens=getattr(usage, "total_tokens", 0) or 0,
+        usage_cost = getattr(usage, "cost", None)
+        if usage_cost is None:
+            usage_cost = getattr(usage, "total_cost", None)
+        return (
+            answer,
+            TokenUsage(
+                prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+                completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
+                total_tokens=getattr(usage, "total_tokens", 0) or 0,
+            ),
+            ProviderGenerationMetadata(
+                provider_reported_cost_usd=float(usage_cost) if usage_cost is not None else None,
+                provider_generation_id=getattr(response, "id", None),
+                provider_usage_source="OpenRouter chat completions usage",
+            ),
         )

@@ -710,7 +710,7 @@ Run the dashboard:
 uv run streamlit run dashboard/app.py
 ```
 
-The dashboard reads request and routing data from Postgres, with a JSONL fallback for local resilience. It surfaces routing decisions, quality-mode distribution, fallback usage, and grouped answer-quality metrics such as groundedness, relevance, citation score, and completeness.
+The dashboard reads request and routing data from Postgres, with a JSONL fallback for local resilience. It surfaces retrieval mode, reranker settings, guardrail abstentions, fallback usage, grouped answer-quality metrics, and provider-reported cost fields when a provider exposes them.
 
 Run the example legal document Q&A backend:
 
