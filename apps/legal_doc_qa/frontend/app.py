@@ -60,6 +60,40 @@ def ask_backend(
         return json.loads(response.read().decode("utf-8"))
 
 
+def run_agent_backend(
+    *,
+    backend_url: str,
+    instruction: str,
+    question: str,
+    recipient_email: str,
+    quality_mode: str,
+    prompt_version: str,
+    top_k: int,
+    reranker_type: str,
+) -> dict:
+    """Call the controlled agent runtime endpoint over HTTP."""
+    payload = json.dumps(
+        {
+            "instruction": instruction,
+            "question": question,
+            "recipient_email": recipient_email or None,
+            "quality_mode": quality_mode,
+            "prompt_version": prompt_version,
+            "retrieval_mode": "hybrid",
+            "top_k": top_k,
+            "reranker_type": reranker_type,
+        }
+    ).encode("utf-8")
+    req = request.Request(
+        url=f"{backend_url.rstrip('/')}/agent/run",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with request.urlopen(req, timeout=120) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
 def format_chunk_location(metadata: dict) -> str:
     """Format the main structural location of a retrieved chunk."""
     article_number = metadata.get("article_number")
@@ -90,6 +124,157 @@ def format_cross_references(metadata: dict) -> list[str]:
     return formatted
 
 
+def render_qa_result(payload: dict) -> None:
+    """Render the standard RAG response payload."""
+    result = payload["result"]
+    st.subheader("Answer")
+    guardrails = result.get("guardrails", {})
+    if guardrails.get("abstained"):
+        st.warning(
+            "Guardrail abstention: "
+            + (guardrails.get("reason") or "request blocked before generation")
+        )
+    st.write(result["answer"])
+
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Latency (ms)", f"{result['latency_ms']:.1f}")
+    col2.metric("Groundedness", f"{result['evaluation']['groundedness_score']:.2f}")
+    col3.metric("Relevance", f"{result['evaluation']['answer_relevance_score']:.2f}")
+    col4.metric("Cost (USD)", f"{result['evaluation']['estimated_cost_usd']:.6f}")
+    eval_col1, eval_col2 = st.columns(2)
+    eval_col1.metric("Citation Score", f"{result['evaluation']['citation_score']:.2f}")
+    eval_col2.metric("Completeness", f"{result['evaluation']['completeness_score']:.2f}")
+    st.caption(
+        "Cost source: "
+        f"{result['evaluation'].get('pricing_source') or 'n/a'} | "
+        f"input=${result['evaluation']['input_cost_usd']:.6f} | "
+        f"output=${result['evaluation']['output_cost_usd']:.6f}"
+    )
+
+    route = result["routing"]
+    st.caption(
+        "Route: "
+        f"{route['selected_provider']} / {route['selected_model']} | "
+        f"quality_mode={result['quality_mode']} | "
+        f"reason={route.get('reason') or 'n/a'}"
+    )
+    reranking = result["reranking"]
+    st.caption(
+        "Reranker: "
+        f"{reranking['reranker_type']}"
+        + (
+            f" / {reranking['reranker_model']}"
+            if reranking.get("reranker_model")
+            else ""
+        )
+    )
+    if guardrails:
+        st.caption(
+            "Guardrails: "
+            f"scope={guardrails.get('scope_status')} | "
+            f"evidence={guardrails.get('evidence_status') or 'n/a'} | "
+            f"abstained={guardrails.get('abstained')}"
+        )
+    if route.get("fallback_used"):
+        st.warning(
+            "Fallback used: "
+            f"{route.get('fallback_provider')} / {route.get('fallback_model')}"
+        )
+
+    with st.expander("Retrieved Chunks", expanded=True):
+        for idx, chunk in enumerate(result["retrieved_chunks"], start=1):
+            metadata = chunk.get("metadata", {})
+            location = format_chunk_location(metadata)
+            title = metadata.get("article_title") or chunk.get("title")
+            heading = f"**{idx}. {location or chunk['source']}**"
+            if title:
+                heading += f"  \n{title}"
+            st.markdown(heading)
+            if chunk.get("score") is not None:
+                caption = f"Similarity score: {chunk['score']:.3f}"
+                if chunk.get("rerank_score") is not None:
+                    caption += f" | Rerank score: {chunk['rerank_score']:.3f}"
+                st.caption(caption)
+            elif chunk.get("rerank_score") is not None:
+                st.caption(f"Rerank score: {chunk['rerank_score']:.3f}")
+            hierarchy_labels = metadata.get("hierarchy_labels") or []
+            if hierarchy_labels:
+                st.caption("Hierarchy: " + " | ".join(hierarchy_labels))
+            st.write(chunk["content"])
+            cross_references = format_cross_references(metadata)
+            if cross_references:
+                st.caption("Cross-references: " + ", ".join(cross_references))
+            with st.expander(f"Chunk metadata #{idx}"):
+                st.json(metadata)
+
+    with st.expander("Raw Response"):
+        st.json(payload)
+
+    with st.expander("Trace"):
+        for event in result["trace"]["events"]:
+            st.markdown(f"**{event['stage']}**")
+            st.caption(f"{event['duration_ms']:.2f} ms")
+            if event.get("metadata"):
+                st.json(event["metadata"])
+
+
+def render_agent_result(payload: dict) -> None:
+    """Render the controlled agent runtime response."""
+    result = payload["result"]
+    status = result["status"]
+    if status == "completed":
+        st.success(f"Run completed: {result['run_id']}")
+    elif status == "aborted":
+        st.warning(f"Run aborted: {result.get('stop_reason') or 'no stop reason'}")
+    else:
+        st.info(f"Run status: {status}")
+
+    top1, top2, top3 = st.columns(3)
+    top1.metric("Run Status", status)
+    top2.metric("Planned Steps", len(result.get("plan", [])))
+    top3.metric("Executed Steps", len(result.get("steps", [])))
+
+    with st.expander("Execution Plan", expanded=True):
+        for step in result.get("plan", []):
+            st.markdown(f"**{step['step_id']} · {step['title']}**")
+            st.caption(f"type={step['step_type']} | capability={step['capability_name']}")
+            if step.get("inputs"):
+                st.json(step["inputs"])
+
+    with st.expander("Step Results", expanded=True):
+        for step in result.get("steps", []):
+            st.markdown(f"**{step['step_id']} · {step['title']}**")
+            st.caption(
+                f"status={step['status']} | step_type={step['step_type']} | latency_ms={step.get('latency_ms')}"
+            )
+            if step.get("checkpoint"):
+                checkpoint = step["checkpoint"]
+                st.caption(
+                    f"checkpoint={checkpoint['decision']} | reason={checkpoint.get('reason') or 'n/a'}"
+                )
+                if checkpoint.get("metrics"):
+                    st.json(checkpoint["metrics"])
+            if step.get("output"):
+                st.json(step["output"])
+            if step.get("error"):
+                st.error(step["error"])
+
+    final_output = result.get("final_output", {})
+    if final_output:
+        st.subheader("Final Output")
+        if final_output.get("answer"):
+            st.markdown("**Answer**")
+            st.write(final_output["answer"])
+        email_draft = final_output.get("email_draft") or {}
+        if email_draft:
+            st.markdown("**Email Draft**")
+            st.text_input("Subject", value=email_draft.get("subject", ""), disabled=True)
+            st.text_area("Body", value=email_draft.get("body", ""), height=220, disabled=True)
+
+    with st.expander("Raw Response"):
+        st.json(payload)
+
+
 st.set_page_config(page_title="Legal Doc Q&A", layout="wide")
 st.title("Legal Document Q&A")
 st.caption("Example application built on top of the genai_gateway runtime.")
@@ -108,118 +293,76 @@ prompt_version = PROMPT_OPTIONS[prompt_label]["version"]
 quality_mode = QUALITY_MODE_OPTIONS[quality_mode_label]
 reranker_type = RERANKER_OPTIONS[reranker_label]
 
-question = st.text_area(
-    "Question",
-    value="What is the aim of this Regulation?",
-    height=120,
-)
+qa_tab, agent_tab = st.tabs(["RAG Q&A", "Controlled Agent Runtime"])
 
-if st.button("Ask", type="primary", use_container_width=True):
-    if not question.strip():
-        st.error("Question is required.")
-    else:
-        try:
-            payload = ask_backend(
-                backend_url=backend_url,
-                question=question.strip(),
-                quality_mode=quality_mode,
-                prompt_version=prompt_version,
-                top_k=top_k,
-                reranker_type=reranker_type,
-            )
-        except error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="ignore")
-            st.error(f"Backend returned HTTP {exc.code}: {detail}")
-        except Exception as exc:  # pragma: no cover - UI fallback
-            st.error(f"Request failed: {exc}")
+with qa_tab:
+    question = st.text_area(
+        "Question",
+        value="What is the aim of this Regulation?",
+        height=120,
+        key="qa_question",
+    )
+
+    if st.button("Ask", type="primary", use_container_width=True, key="qa_ask"):
+        if not question.strip():
+            st.error("Question is required.")
         else:
-            result = payload["result"]
-            st.subheader("Answer")
-            guardrails = result.get("guardrails", {})
-            if guardrails.get("abstained"):
-                st.warning(
-                    "Guardrail abstention: "
-                    + (guardrails.get("reason") or "request blocked before generation")
+            try:
+                payload = ask_backend(
+                    backend_url=backend_url,
+                    question=question.strip(),
+                    quality_mode=quality_mode,
+                    prompt_version=prompt_version,
+                    top_k=top_k,
+                    reranker_type=reranker_type,
                 )
-            st.write(result["answer"])
+            except error.HTTPError as exc:
+                detail = exc.read().decode("utf-8", errors="ignore")
+                st.error(f"Backend returned HTTP {exc.code}: {detail}")
+            except Exception as exc:  # pragma: no cover - UI fallback
+                st.error(f"Request failed: {exc}")
+            else:
+                render_qa_result(payload)
 
-            col1, col2, col3, col4 = st.columns(4)
-            col1.metric("Latency (ms)", f"{result['latency_ms']:.1f}")
-            col2.metric("Groundedness", f"{result['evaluation']['groundedness_score']:.2f}")
-            col3.metric("Relevance", f"{result['evaluation']['answer_relevance_score']:.2f}")
-            col4.metric("Cost (USD)", f"{result['evaluation']['estimated_cost_usd']:.6f}")
-            eval_col1, eval_col2 = st.columns(2)
-            eval_col1.metric("Citation Score", f"{result['evaluation']['citation_score']:.2f}")
-            eval_col2.metric("Completeness", f"{result['evaluation']['completeness_score']:.2f}")
-            st.caption(
-                "Cost source: "
-                f"{result['evaluation'].get('pricing_source') or 'n/a'} | "
-                f"input=${result['evaluation']['input_cost_usd']:.6f} | "
-                f"output=${result['evaluation']['output_cost_usd']:.6f}"
-            )
+with agent_tab:
+    st.caption("Phase 1 controlled workflow: retrieve context, answer the question, then draft a follow-up email.")
+    agent_instruction = st.text_area(
+        "Instruction",
+        value="Answer the question from the legal corpus and draft a follow-up email.",
+        height=100,
+        key="agent_instruction",
+    )
+    agent_question = st.text_area(
+        "Question",
+        value="What obligations apply to providers regarding illegal content notices?",
+        height=120,
+        key="agent_question",
+    )
+    agent_recipient = st.text_input(
+        "Recipient Email",
+        value="legal-team@example.com",
+        key="agent_recipient",
+    )
 
-            route = result["routing"]
-            st.caption(
-                "Route: "
-                f"{route['selected_provider']} / {route['selected_model']} | "
-                f"quality_mode={result['quality_mode']} | "
-                f"reason={route.get('reason') or 'n/a'}"
-            )
-            reranking = result["reranking"]
-            st.caption(
-                "Reranker: "
-                f"{reranking['reranker_type']}"
-                + (
-                    f" / {reranking['reranker_model']}"
-                    if reranking.get("reranker_model")
-                    else ""
+    if st.button("Run Controlled Workflow", type="primary", use_container_width=True, key="agent_run"):
+        if not agent_instruction.strip() or not agent_question.strip():
+            st.error("Instruction and question are required.")
+        else:
+            try:
+                payload = run_agent_backend(
+                    backend_url=backend_url,
+                    instruction=agent_instruction.strip(),
+                    question=agent_question.strip(),
+                    recipient_email=agent_recipient.strip(),
+                    quality_mode=quality_mode,
+                    prompt_version=prompt_version,
+                    top_k=top_k,
+                    reranker_type=reranker_type,
                 )
-            )
-            if guardrails:
-                st.caption(
-                    "Guardrails: "
-                    f"scope={guardrails.get('scope_status')} | "
-                    f"evidence={guardrails.get('evidence_status') or 'n/a'} | "
-                    f"abstained={guardrails.get('abstained')}"
-                )
-            if route.get("fallback_used"):
-                st.warning(
-                    "Fallback used: "
-                    f"{route.get('fallback_provider')} / {route.get('fallback_model')}"
-                )
-
-            with st.expander("Retrieved Chunks", expanded=True):
-                for idx, chunk in enumerate(result["retrieved_chunks"], start=1):
-                    metadata = chunk.get("metadata", {})
-                    location = format_chunk_location(metadata)
-                    title = metadata.get("article_title") or chunk.get("title")
-                    heading = f"**{idx}. {location or chunk['source']}**"
-                    if title:
-                        heading += f"  \n{title}"
-                    st.markdown(heading)
-                    if chunk.get("score") is not None:
-                        caption = f"Similarity score: {chunk['score']:.3f}"
-                        if chunk.get("rerank_score") is not None:
-                            caption += f" | Rerank score: {chunk['rerank_score']:.3f}"
-                        st.caption(caption)
-                    elif chunk.get("rerank_score") is not None:
-                        st.caption(f"Rerank score: {chunk['rerank_score']:.3f}")
-                    hierarchy_labels = metadata.get("hierarchy_labels") or []
-                    if hierarchy_labels:
-                        st.caption("Hierarchy: " + " | ".join(hierarchy_labels))
-                    st.write(chunk["content"])
-                    cross_references = format_cross_references(metadata)
-                    if cross_references:
-                        st.caption("Cross-references: " + ", ".join(cross_references))
-                    with st.expander(f"Chunk metadata #{idx}"):
-                        st.json(metadata)
-
-            with st.expander("Raw Response"):
-                st.json(payload)
-
-            with st.expander("Trace"):
-                for event in result["trace"]["events"]:
-                    st.markdown(f"**{event['stage']}**")
-                    st.caption(f"{event['duration_ms']:.2f} ms")
-                    if event.get("metadata"):
-                        st.json(event["metadata"])
+            except error.HTTPError as exc:
+                detail = exc.read().decode("utf-8", errors="ignore")
+                st.error(f"Backend returned HTTP {exc.code}: {detail}")
+            except Exception as exc:  # pragma: no cover - UI fallback
+                st.error(f"Request failed: {exc}")
+            else:
+                render_agent_result(payload)

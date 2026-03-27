@@ -8,7 +8,7 @@ Current scope:
 - example source documents under `data/legal_documents/`
 - retrieval evaluation samples under `data/eval/`
 - `backend/app.py` exposes an app-specific `/ask` API on top of the runtime
-- `frontend/app.py` provides a small Streamlit UI for interactive Q&A
+- `frontend/app.py` provides a small Streamlit UI for both interactive Q&A and the controlled `/agent/run` workflow demo
 
 Run locally:
 
@@ -17,11 +17,18 @@ uv run uvicorn apps.legal_doc_qa.backend.app:app --reload --port 8010
 uv run streamlit run apps/legal_doc_qa/frontend/app.py
 ```
 
+The Streamlit app has two demo tabs:
+
+- `RAG Q&A` for the standard `/ask` request-response flow
+- `Controlled Agent Runtime` for the `/agent/run` workflow that retrieves context, answers the question, and drafts a follow-up email
+
 Populate the dashboard with a few example requests:
 
 ```bash
 uv run python scripts/seed_demo_requests.py
 ```
+
+The dashboard also shows `/agent/run` executions once you trigger them from the Streamlit demo or backend API.
 
 Reset request history first if you want a clean demo:
 

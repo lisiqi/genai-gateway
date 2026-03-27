@@ -90,9 +90,17 @@ class QueryLog(Base):
     __tablename__ = "query_logs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    request_kind: Mapped[str] = mapped_column(String(30), default="query", index=True)
     task: Mapped[str] = mapped_column(String(100), index=True)
     quality_mode: Mapped[str] = mapped_column(String(50), default="default")
     prompt_version: Mapped[str] = mapped_column(String(50))
+    agent_run_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    agent_task_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    instruction: Mapped[str | None] = mapped_column(Text, nullable=True)
+    agent_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    agent_stop_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    agent_step_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    agent_report_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     selected_provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
     model_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     reranker_type: Mapped[str | None] = mapped_column(String(50), nullable=True)

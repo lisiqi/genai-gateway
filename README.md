@@ -710,7 +710,7 @@ Run the dashboard:
 uv run streamlit run dashboard/app.py
 ```
 
-The dashboard reads request and routing data from Postgres, with a JSONL fallback for local resilience. It surfaces retrieval mode, reranker settings, guardrail abstentions, fallback usage, grouped answer-quality metrics, and provider-reported cost fields when a provider exposes them.
+The dashboard reads runtime data from Postgres, with a JSONL fallback for local resilience. It surfaces both request-response runs and controlled agent runs, including retrieval mode, reranker settings, guardrail abstentions, grouped answer-quality metrics, provider-reported cost fields, and stored agent execution reports.
 
 Run the example legal document Q&A backend:
 
@@ -749,6 +749,7 @@ The next development steps are:
 3. Replace deterministic local embeddings with a real non-placeholder provider strategy
 4. Expand the legal corpus for multi-document retrieval and comparison
 5. Add reranking-aware comparisons in the dashboard and experiment runner
+6. Extend the runtime into controlled multi-step execution
 
 ## Architecture Decisions
 
@@ -763,6 +764,7 @@ This repository also captures design decisions as lightweight ADRs in `docs/adr/
 - [ADR 007: Offline retrieval evaluation workflow](docs/adr/007-offline-retrieval-evaluation-workflow.md)
 - [ADR 008: Hybrid retrieval architecture](docs/adr/008-hybrid-retrieval-architecture.md)
 - [ADR 009: Runtime guardrails](docs/adr/009-runtime-guardrails.md)
+- [ADR 010: Controlled agent runtime phase 1](docs/adr/010-controlled-agent-runtime-phase-1.md)
 
 ## Learning Notes
 
@@ -772,6 +774,7 @@ Longer explanatory notes live in `docs/learning-notes/`.
 
 - [Database stack](docs/learning-notes/database-stack.md)
 - [Chunking logic](docs/learning-notes/chunking-logic.md)
+- [Controlled agent runtime](docs/learning-notes/controlled-agent-runtime.md)
 - [Evaluation architecture](docs/learning-notes/evaluation-architecture.md)
 - [Guardrails](docs/learning-notes/guardrails.md)
 - [PDF extraction strategy](docs/learning-notes/pdf-extraction-strategy.md)

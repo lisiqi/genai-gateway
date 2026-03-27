@@ -66,13 +66,22 @@ def load_request_rows() -> tuple[list[dict], str]:
         for query_log, evaluation in rows:
             trace_json = query_log.trace_json or []
             trace_summary = summarize_trace(trace_json)
+            agent_report = query_log.agent_report_json or {}
             guardrail_abstained = query_log.selected_provider == "guardrail"
             table_rows.append(
                 {
                     "timestamp": query_log.created_at.isoformat() if query_log.created_at else None,
+                    "request_kind": query_log.request_kind,
                     "task": query_log.task,
                     "quality_mode": query_log.quality_mode,
                     "prompt_version": query_log.prompt_version,
+                    "agent_run_id": query_log.agent_run_id,
+                    "agent_task_type": query_log.agent_task_type,
+                    "instruction": query_log.instruction,
+                    "agent_status": query_log.agent_status,
+                    "agent_stop_reason": query_log.agent_stop_reason,
+                    "agent_step_count": query_log.agent_step_count,
+                    "agent_report_json": agent_report,
                     "provider": query_log.selected_provider,
                     "model": query_log.model_name,
                     "reranker_type": query_log.reranker_type,
@@ -127,8 +136,101 @@ def load_request_rows() -> tuple[list[dict], str]:
         ]
         table_rows = []
         for record in records:
+            request_kind = record.get("request_kind") or "query"
             request_payload = record.get("request", {})
             response_payload = record.get("response", {})
+            if request_kind == "agent_run":
+                final_output = response_payload.get("final_output", {})
+                answer_metadata = final_output.get("answer_metadata") or {}
+                trace_json = []
+                for step in response_payload.get("steps", []):
+                    step_type = step.get("step_type")
+                    output = step.get("output") or {}
+                    metadata = {
+                        "step_id": step.get("step_id"),
+                        "status": step.get("status"),
+                    }
+                    if step_type == "retrieve_context":
+                        stage = "retrieval.search"
+                        metadata["retrieval_mode"] = output.get("retrieval_mode")
+                    elif step_type == "answer_question":
+                        stage = "generation.answer"
+                        metadata["provider"] = output.get("provider")
+                        metadata["model"] = output.get("model")
+                    elif step_type == "draft_email":
+                        stage = "generation.draft_email"
+                    else:
+                        stage = f"agent.{step_type}"
+                    trace_json.append(
+                        {
+                            "stage": stage,
+                            "duration_ms": float(step.get("latency_ms") or 0.0),
+                            "metadata": metadata,
+                        }
+                    )
+                trace_summary = summarize_trace(trace_json)
+                answer_step = next(
+                    (
+                        step
+                        for step in response_payload.get("steps", [])
+                        if step.get("step_type") == "answer_question"
+                    ),
+                    {},
+                )
+                answer_checkpoint = answer_step.get("checkpoint") or {}
+                answer_metrics = answer_checkpoint.get("metrics") or {}
+                table_rows.append(
+                    {
+                        "timestamp": record.get("timestamp"),
+                        "request_kind": "agent_run",
+                        "task": request_payload.get("task"),
+                        "quality_mode": request_payload.get("quality_mode") or "default",
+                        "prompt_version": request_payload.get("prompt_version"),
+                        "agent_run_id": response_payload.get("run_id"),
+                        "agent_task_type": response_payload.get("task_type"),
+                        "instruction": request_payload.get("instruction"),
+                        "agent_status": response_payload.get("status"),
+                        "agent_stop_reason": response_payload.get("stop_reason"),
+                        "agent_step_count": len(response_payload.get("steps", [])),
+                        "agent_report_json": response_payload,
+                        "provider": answer_metadata.get("provider"),
+                        "model": answer_metadata.get("model"),
+                        "reranker_type": request_payload.get("reranker_type"),
+                        "reranker_model": None,
+                        "reranker_top_k": None,
+                        "fallback_used": answer_metadata.get("fallback_used"),
+                        "fallback_provider": None,
+                        "fallback_model": None,
+                        "routing_reason": response_payload.get("stop_reason"),
+                        "latency_ms": sum(float(step.get("latency_ms") or 0.0) for step in response_payload.get("steps", [])),
+                        "retrieval_ms": trace_summary["retrieval_ms"],
+                        "generation_ms": trace_summary["generation_ms"],
+                        "retrieval_mode": trace_summary["retrieval_mode"],
+                        "guardrail_abstained": False,
+                        "guardrail_scope_status": trace_summary["guardrail_scope_status"],
+                        "guardrail_evidence_status": trace_summary["guardrail_evidence_status"],
+                        "guardrail_reason": response_payload.get("stop_reason"),
+                        "trace_events": len(trace_json),
+                        "groundedness": answer_metrics.get("groundedness"),
+                        "answer_relevance": answer_metrics.get("answer_relevance"),
+                        "citation_score": answer_metrics.get("citation_score"),
+                        "completeness_score": answer_metrics.get("completeness"),
+                        "cost_usd": answer_step.get("output", {}).get("estimated_cost_usd"),
+                        "provider_reported_cost_usd": answer_step.get("output", {}).get("provider_reported_cost_usd"),
+                        "display_cost_usd": (
+                            answer_step.get("output", {}).get("provider_reported_cost_usd")
+                            if answer_step.get("output", {}).get("provider_reported_cost_usd") is not None
+                            else answer_step.get("output", {}).get("estimated_cost_usd")
+                        ),
+                        "pricing_source": answer_step.get("output", {}).get("pricing_source"),
+                        "provider_usage_source": answer_step.get("output", {}).get("provider_usage_source"),
+                        "provider_generation_id": answer_step.get("output", {}).get("provider_generation_id"),
+                        "cost_is_estimated": answer_step.get("output", {}).get("provider_reported_cost_usd") is None,
+                        "question": request_payload.get("question"),
+                    }
+                )
+                continue
+
             routing = response_payload.get("routing", {})
             evaluation = response_payload.get("evaluation", {})
             trace_json = response_payload.get("trace", {}).get("events", [])
@@ -137,9 +239,17 @@ def load_request_rows() -> tuple[list[dict], str]:
             table_rows.append(
                 {
                     "timestamp": record.get("timestamp"),
+                    "request_kind": "query",
                     "task": request_payload.get("task"),
                     "quality_mode": request_payload.get("quality_mode") or "default",
                     "prompt_version": request_payload.get("prompt_version"),
+                    "agent_run_id": None,
+                    "agent_task_type": None,
+                    "instruction": None,
+                    "agent_status": None,
+                    "agent_stop_reason": None,
+                    "agent_step_count": None,
+                    "agent_report_json": None,
                     "provider": routing.get("selected_provider"),
                     "model": routing.get("selected_model"),
                     "reranker_type": response_payload.get("reranking", {}).get("reranker_type"),
@@ -190,6 +300,7 @@ def apply_filters(frame: pd.DataFrame) -> pd.DataFrame:
     st.sidebar.header("Filters")
     st.sidebar.caption("Leave a selector empty to include all values.")
 
+    request_kind_options = build_filter_options(frame, "request_kind")
     task_options = build_filter_options(frame, "task")
     mode_options = build_filter_options(frame, "quality_mode")
     prompt_options = build_filter_options(frame, "prompt_version")
@@ -201,6 +312,12 @@ def apply_filters(frame: pd.DataFrame) -> pd.DataFrame:
     guardrail_scope_options = build_filter_options(frame, "guardrail_scope_status")
 
     with st.sidebar.expander("Request Filters", expanded=True):
+        selected_request_kinds = st.multiselect(
+            "Request Kind",
+            options=request_kind_options,
+            default=[],
+            placeholder="All",
+        )
         selected_tasks = st.multiselect("Task", options=task_options, default=[], placeholder="All")
         selected_modes = st.multiselect("Quality Mode", options=mode_options, default=[], placeholder="All")
         selected_prompts = st.multiselect("Prompt Version", options=prompt_options, default=[], placeholder="All")
@@ -238,6 +355,8 @@ def apply_filters(frame: pd.DataFrame) -> pd.DataFrame:
         abstentions_only = st.checkbox("Guardrail Abstentions Only", value=False)
 
     filtered = frame.copy()
+    if selected_request_kinds:
+        filtered = filtered[filtered["request_kind"].isin(selected_request_kinds)]
     if selected_tasks:
         filtered = filtered[filtered["task"].isin(selected_tasks)]
     if selected_modes:
@@ -329,11 +448,13 @@ def build_group_summary(frame: pd.DataFrame, group_by: str) -> pd.DataFrame:
 def render_group_tables(frame: pd.DataFrame) -> None:
     """Render grouped comparison tables."""
     sections = [
+        ("By Request Kind", "request_kind"),
         ("By Quality Mode", "quality_mode"),
         ("By Retrieval Mode", "retrieval_mode"),
         ("By Model", "model"),
         ("By Reranker", "reranker_type"),
         ("By Guardrail Scope", "guardrail_scope_status"),
+        ("By Agent Status", "agent_status"),
     ]
     for title, group_by in sections:
         st.subheader(title)
@@ -344,9 +465,15 @@ def render_request_log(frame: pd.DataFrame) -> None:
     """Render request-level drilldown."""
     display_columns = [
         "timestamp",
+        "request_kind",
         "task",
         "quality_mode",
         "prompt_version",
+        "agent_run_id",
+        "agent_task_type",
+        "agent_status",
+        "agent_stop_reason",
+        "agent_step_count",
         "provider",
         "model",
         "retrieval_mode",
@@ -375,10 +502,23 @@ def render_request_log(frame: pd.DataFrame) -> None:
         "provider_generation_id",
         "pricing_source",
         "cost_is_estimated",
+        "instruction",
         "question",
     ]
-    st.subheader("Request Log")
+    st.subheader("Run Log")
     st.dataframe(frame[display_columns], use_container_width=True, hide_index=True)
+
+    agent_rows = frame[frame["request_kind"] == "agent_run"]
+    if not agent_rows.empty:
+        st.subheader("Agent Run Reports")
+        options = [
+            f"{row.agent_run_id} | {row.agent_status} | {row.question}"
+            for row in agent_rows[["agent_run_id", "agent_status", "question"]].itertuples(index=False)
+        ]
+        selected = st.selectbox("Inspect Agent Run", options=options)
+        selected_run_id = selected.split(" | ", 1)[0]
+        selected_row = agent_rows[agent_rows["agent_run_id"] == selected_run_id].iloc[0]
+        st.json(selected_row["agent_report_json"])
 
 
 st.set_page_config(page_title="GenAI Gateway Dashboard", layout="wide")
@@ -386,7 +526,7 @@ st.title("GenAI Gateway Dashboard")
 
 table_rows, data_source = load_request_rows()
 if not table_rows:
-    st.info("No request logs found yet. Run the API and send a `/query` request first.")
+    st.info("No runtime logs found yet. Run the API and send a `/ask` or `/agent/run` request first.")
 else:
     full_frame = pd.DataFrame(table_rows)
     filtered_frame = apply_filters(full_frame)

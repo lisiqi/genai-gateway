@@ -2,7 +2,7 @@
 
 from fastapi import FastAPI
 
-from apps.legal_doc_qa.backend.schemas import AskRequest, AskResponse
+from apps.legal_doc_qa.backend.schemas import AgentRunRequest, AgentRunResponse, AskRequest, AskResponse
 from apps.legal_doc_qa.backend.service import LegalDocQAService
 
 
@@ -32,3 +32,19 @@ def ask(request: AskRequest) -> AskResponse:
         reranker_type=request.reranker_type,
     )
     return AskResponse(question=request.question, result=result)
+
+
+@app.post("/agent/run", response_model=AgentRunResponse)
+def run_agent(request: AgentRunRequest) -> AgentRunResponse:
+    """Run the controlled agent workflow for a legal QA task."""
+    result = service.run_agent_task(
+        instruction=request.instruction,
+        question=request.question,
+        recipient_email=request.recipient_email,
+        quality_mode=request.quality_mode,
+        prompt_version=request.prompt_version,
+        retrieval_mode=request.retrieval_mode,
+        top_k=request.top_k,
+        reranker_type=request.reranker_type,
+    )
+    return AgentRunResponse(result=result)
