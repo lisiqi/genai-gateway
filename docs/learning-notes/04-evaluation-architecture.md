@@ -153,22 +153,6 @@ Use:
 - an offline retrieval evaluation module for IR metrics
 - `Langfuse` for traces, cost/usage visibility, and experiment comparison
 
-## What To Reuse Conceptually From `rf-genai`
-
-The older `rf-genai` repo had useful ideas for retrieval evaluation, especially:
-
-- evaluation dataset structure
-- pure IR metrics
-- evaluation harness / batch runner
-
-Those ideas are useful here as reference, but this repo should separate:
-
-- retrieval evaluation
-- request-time platform evaluation
-- end-to-end answer evaluation
-
-more explicitly than the older repo did.
-
 ## Recommended Implementation Order
 
 1. persist request-time evaluation in Postgres

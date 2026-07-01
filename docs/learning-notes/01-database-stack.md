@@ -147,7 +147,7 @@ So:
 
 This is why the database schema in this project is expressed in Python classes inside:
 
-- [models.py](/Users/lisiqi/repository/genai-gateway/database/models.py)
+- [models.py](/database/models.py)
 
 ### 4. Alembic
 
@@ -207,19 +207,19 @@ This file defines the ORM models such as:
 
 The actual schema changes that are executed against Postgres live in:
 
-- [20260312_000001_initial_schema.py](/Users/lisiqi/repository/genai-gateway/alembic/versions/20260312_000001_initial_schema.py)
+- [20260312_000001_initial_schema.py](/alembic/versions/20260312_000001_initial_schema.py)
 
 ### `alembic/env.py`: migration wiring
 
 Alembic needs to know which SQLAlchemy metadata and database URL it should use. That wiring lives in:
 
-- [env.py](/Users/lisiqi/repository/genai-gateway/alembic/env.py)
+- [env.py](/alembic/env.py)
 
 ### `database/session.py`: runtime database access
 
 The code that creates the SQLAlchemy engine and sessions lives in:
 
-- [session.py](/Users/lisiqi/repository/genai-gateway/database/session.py)
+- [session.py](/database/session.py)
 
 ## Local Development Workflow
 
@@ -245,7 +245,7 @@ docker info
 
 ### What `docker compose up -d` does
 
-This starts the local Postgres container defined in [docker-compose.yml](/Users/lisiqi/repository/genai-gateway/docker-compose.yml).
+This starts the local Postgres container defined in [docker-compose.yml](/docker-compose.yml).
 
 ### What `docker compose down` does
 

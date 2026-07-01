@@ -19,13 +19,16 @@ from database.session import SessionLocal
 from genai_gateway.evaluation.retrieval import (
     CorpusChunk,
     LLMRetrievalSampleGenerator,
+    RelevanceJudge,
     build_evaluation_dataset,
+    pool_relevant_chunks,
 )
 from genai_gateway.providers.chat import get_chat_provider
+from genai_gateway.retrieval.retriever import RetrievalService
 from genai_gateway.runtime.policies.model_routing import ModelRoutingPolicy
 
 
-DEFAULT_OUTPUT_TEMPLATE = "apps/legal_doc_qa/data/eval/legal_qa_retrieval_samples.{generation_method}.jsonl"
+DEFAULT_OUTPUT_TEMPLATE = "apps/legal_doc_qa/data/eval/legal_qa_retrieval_samples.{generation_method}{variant}.jsonl"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -76,6 +79,46 @@ def build_parser() -> argparse.ArgumentParser:
         "--generation-model",
         default=None,
         help="Optional explicit model override; bypasses the routed model for LLM generation.",
+    )
+    parser.add_argument(
+        "--judge-relevance",
+        action="store_true",
+        help=(
+            "After generation, expand single-positive labels to multi-positive using "
+            "retrieval pooling + an LLM relevance judge."
+        ),
+    )
+    parser.add_argument(
+        "--judge-quality-mode",
+        default="cheap",
+        help="Routing quality mode used to select the LLM relevance judge.",
+    )
+    parser.add_argument(
+        "--judge-prompt-version",
+        default="v1",
+        help="Prompt version passed to route resolution when selecting the relevance judge.",
+    )
+    parser.add_argument(
+        "--judge-provider",
+        default=None,
+        help="Optional explicit provider override for the relevance judge.",
+    )
+    parser.add_argument(
+        "--judge-model",
+        default=None,
+        help="Optional explicit model override for the relevance judge.",
+    )
+    parser.add_argument(
+        "--pool-top-k",
+        type=int,
+        default=10,
+        help="Number of candidate chunks to pool per retrieval mode before judging.",
+    )
+    parser.add_argument(
+        "--pool-retrieval-modes",
+        nargs="+",
+        default=["dense", "lexical"],
+        help="Retrieval modes unioned into the candidate pool (default: dense lexical).",
     )
     return parser
 
@@ -157,7 +200,61 @@ def main() -> None:
         llm_generator=llm_generator,
         progress_callback=on_progress,
     )
-    target = Path(args.output or DEFAULT_OUTPUT_TEMPLATE.format(generation_method=args.generation_method))
+
+    if args.judge_relevance:
+        judge_routing = ModelRoutingPolicy().select(
+            task=args.task,
+            quality_mode=args.judge_quality_mode,
+            prompt_version=args.judge_prompt_version,
+        )
+        judge_provider = args.judge_provider or judge_routing.provider
+        judge_model = args.judge_model or judge_routing.model
+        judge = RelevanceJudge(
+            chat_provider=get_chat_provider(provider_name=judge_provider, model_name=judge_model),
+            provider_name=judge_provider,
+            model_name=judge_model,
+            retrieval_service=RetrievalService(),
+            pool_top_k=args.pool_top_k,
+            pool_retrieval_modes=args.pool_retrieval_modes,
+        )
+        print(
+            "[2b/3] Pooling relevance judgments with "
+            f"provider={judge_provider} model={judge_model} "
+            f"pool_top_k={args.pool_top_k} modes={args.pool_retrieval_modes}...",
+            flush=True,
+        )
+        pooling_started_at = perf_counter()
+        total_added = 0
+
+        def on_pooling_progress(completed: int, total: int, sample) -> None:
+            nonlocal total_added
+            total_added += len(sample.metadata.get("relevance_pooling", {}).get("judged_relevant", []))
+            print(
+                f"[2b/3] Judged {completed}/{total} samples "
+                f"(+{total_added} relevant labels so far, "
+                f"elapsed={perf_counter() - pooling_started_at:.2f}s)",
+                flush=True,
+            )
+
+        pool_relevant_chunks(
+            dataset,
+            task=args.task,
+            judge=judge,
+            progress_callback=on_pooling_progress,
+        )
+        print(
+            f"[2b/3] Relevance pooling added {total_added} labels across {len(dataset)} samples.",
+            flush=True,
+        )
+
+    default_variant = ".pooled" if args.judge_relevance else ""
+    target = Path(
+        args.output
+        or DEFAULT_OUTPUT_TEMPLATE.format(
+            generation_method=args.generation_method,
+            variant=default_variant,
+        )
+    )
     target.parent.mkdir(parents=True, exist_ok=True)
     print(f"[3/3] Writing dataset to {target}...", flush=True)
     dataset.save(str(target))

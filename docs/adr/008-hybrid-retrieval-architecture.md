@@ -63,7 +63,7 @@ Dense retrieval remains the existing embedding-based search:
 Lexical retrieval uses Postgres full-text search over chunk content:
 
 - `to_tsvector('english', content)`
-- `websearch_to_tsquery('english', question)`
+- `to_tsquery('english', query_text)`, where `query_text` is produced by a task-specific lexical query builder (which also extracts `article_number` / `clause_number` for exact metadata filtering) rather than passing the raw question directly
 - rank with `ts_rank_cd(...)`
 
 This keeps the lexical retriever inside the existing Postgres stack instead of introducing a second search service.

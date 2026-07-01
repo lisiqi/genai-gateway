@@ -4,6 +4,12 @@ The module has two generation paths:
 
 - heuristic generation: derive questions and gold answers from chunk metadata/text
 - llm generation: ask a chat model to produce question/gold-answer pairs per chunk
+
+It also exposes an optional relevance-pooling pass (`pool_relevant_chunks`) that
+expands each sample's single source label into multi-positive labels using
+retrieval pooling plus an LLM relevance judge. This mitigates the false-negative
+bias of single-positive synthetic datasets, where a retrieved-but-unlabeled
+relevant chunk is otherwise scored as a miss.
 """
 
 from __future__ import annotations
@@ -13,10 +19,23 @@ from dataclasses import dataclass
 import json
 import math
 import re
-from typing import Any
+from typing import Any, Protocol
 
 from genai_gateway.evaluation.retrieval.datasets import EvaluationDataset, EvaluationSample
 from genai_gateway.providers.chat.base import ChatProvider
+
+
+class SupportsRetrieve(Protocol):
+    """Minimal retrieval interface required for relevance pooling."""
+
+    def retrieve(
+        self,
+        question: str,
+        task: str,
+        top_k: int | None = None,
+        retrieval_mode: str | None = None,
+    ) -> list[dict]:
+        """Return candidate chunks for a question."""
 
 
 @dataclass
@@ -55,7 +74,7 @@ class LLMRetrievalSampleGenerator:
     def generate_sample(self, chunk: CorpusChunk) -> GeneratedSampleContent:
         """Generate one retrieval-evaluation sample for a chunk."""
         prompt = _build_llm_prompt(chunk)
-        raw_response, usage = self.chat_provider.generate(
+        raw_response, usage, _metadata = self.chat_provider.generate(
             prompt=prompt,
             question="Generate one retrieval-evaluation sample as JSON.",
         )
@@ -267,6 +286,141 @@ def _parse_llm_json(raw_response: str) -> dict[str, Any]:
         except json.JSONDecodeError:
             return {}
     return parsed if isinstance(parsed, dict) else {}
+
+
+# Relevance pooling path
+
+
+@dataclass
+class PoolingResult:
+    """Outcome of judging one sample's pooled retrieval candidates."""
+
+    candidates_judged: list[str]
+    judged_relevant: list[str]
+
+
+class RelevanceJudge:
+    """Expand single-positive labels using retrieval pooling + an LLM judge.
+
+    For each sample, candidate chunks are pooled from one or more retrieval modes
+    (dense + lexical by default, to reduce single-system pooling bias), then each
+    candidate not already labelled relevant is judged for relevance by an LLM.
+    Judged-relevant candidates are added to `relevant_chunk_ids`.
+
+    Note: candidates are drawn from the retriever(s) under test, so this cannot
+    surface relevant chunks that no pooled retriever ranks in its top-k. It fixes
+    the common false-negative case (retrieved-but-unlabelled relevant chunks) but
+    does not claim exhaustive relevance judgments.
+    """
+
+    def __init__(
+        self,
+        *,
+        chat_provider: ChatProvider,
+        provider_name: str,
+        model_name: str,
+        retrieval_service: SupportsRetrieve,
+        pool_top_k: int = 10,
+        pool_retrieval_modes: list[str] | None = None,
+    ) -> None:
+        self.chat_provider = chat_provider
+        self.provider_name = provider_name
+        self.model_name = model_name
+        self.retrieval_service = retrieval_service
+        self.pool_top_k = pool_top_k
+        self.pool_retrieval_modes = pool_retrieval_modes or ["dense", "lexical"]
+
+    def expand_sample(self, sample: EvaluationSample, *, task: str) -> PoolingResult:
+        """Judge pooled candidates and extend `relevant_chunk_ids` in place."""
+        existing = set(sample.relevant_chunk_ids)
+        candidates_judged: list[str] = []
+        judged_relevant: list[str] = []
+        for candidate in self._pool_candidates(question=sample.question, task=task):
+            chunk_id = candidate.get("chunk_id")
+            if not chunk_id or chunk_id in existing:
+                continue
+            candidates_judged.append(chunk_id)
+            if self.judge_relevance(
+                question=sample.question,
+                chunk_content=str(candidate.get("content", "")),
+            ):
+                sample.relevant_chunk_ids.append(chunk_id)
+                existing.add(chunk_id)
+                judged_relevant.append(chunk_id)
+        return PoolingResult(candidates_judged=candidates_judged, judged_relevant=judged_relevant)
+
+    def judge_relevance(self, *, question: str, chunk_content: str) -> bool:
+        """Ask the LLM whether a passage helps answer the question."""
+        if not chunk_content.strip():
+            return False
+        prompt = _build_judge_prompt(question=question, chunk_content=chunk_content)
+        raw_response, _usage, _metadata = self.chat_provider.generate(
+            prompt=prompt,
+            question="Answer strictly yes or no.",
+        )
+        return _parse_yes_no(raw_response)
+
+    def _pool_candidates(self, *, question: str, task: str) -> list[dict]:
+        """Union candidate chunks across the configured retrieval modes."""
+        pooled: dict[str, dict] = {}
+        for mode in self.pool_retrieval_modes:
+            for chunk in self.retrieval_service.retrieve(
+                question=question,
+                task=task,
+                top_k=self.pool_top_k,
+                retrieval_mode=mode,
+            ):
+                chunk_id = chunk.get("chunk_id")
+                if chunk_id and chunk_id not in pooled:
+                    pooled[chunk_id] = chunk
+        return list(pooled.values())
+
+
+def pool_relevant_chunks(
+    dataset: EvaluationDataset,
+    *,
+    task: str,
+    judge: RelevanceJudge,
+    progress_callback: Callable[[int, int, EvaluationSample], None] | None = None,
+) -> EvaluationDataset:
+    """Expand each sample's relevant_chunk_ids via pooling + LLM judgment.
+
+    Mutates samples in place, records pooling provenance under
+    `metadata["relevance_pooling"]`, and returns the same dataset.
+    """
+    total = len(dataset.samples)
+    for index, sample in enumerate(dataset.samples, start=1):
+        result = judge.expand_sample(sample, task=task)
+        sample.metadata["relevance_pooling"] = {
+            "judge_provider": judge.provider_name,
+            "judge_model": judge.model_name,
+            "pool_top_k": judge.pool_top_k,
+            "pool_retrieval_modes": list(judge.pool_retrieval_modes),
+            "candidates_judged": result.candidates_judged,
+            "judged_relevant": result.judged_relevant,
+        }
+        if progress_callback is not None:
+            progress_callback(index, total, sample)
+    return dataset
+
+
+def _build_judge_prompt(*, question: str, chunk_content: str) -> str:
+    """Create the prompt used to ask an LLM to judge passage relevance."""
+    return (
+        "You are judging retrieval relevance for a legal RAG benchmark.\n"
+        "Decide whether the passage below contains information that directly helps "
+        "answer the question.\n"
+        "Answer with a single word: yes or no.\n\n"
+        f"Question:\n{question}\n\n"
+        f"Passage:\n{chunk_content}\n"
+    )
+
+
+def _parse_yes_no(raw_response: str) -> bool:
+    """Interpret an LLM yes/no response leniently."""
+    match = re.search(r"[a-zA-Z]+", raw_response.strip().lower())
+    token = match.group(0) if match else ""
+    return token in {"yes", "y", "true", "relevant"}
 
 
 # Shared text helpers

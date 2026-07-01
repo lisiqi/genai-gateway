@@ -5,7 +5,10 @@ from genai_gateway.evaluation.retrieval.generation import (
     CorpusChunk,
     GeneratedSampleContent,
     LLMRetrievalSampleGenerator,
+    PoolingResult,
+    RelevanceJudge,
     build_evaluation_dataset,
+    pool_relevant_chunks,
 )
 from genai_gateway.evaluation.retrieval.harness import (
     RetrievalEvaluationReport,
@@ -19,8 +22,11 @@ __all__ = [
     "CorpusChunk",
     "GeneratedSampleContent",
     "LLMRetrievalSampleGenerator",
+    "PoolingResult",
+    "RelevanceJudge",
     "RetrievalEvaluationReport",
     "RetrievalEvaluationResult",
     "RetrievalEvaluationRunner",
     "build_evaluation_dataset",
+    "pool_relevant_chunks",
 ]

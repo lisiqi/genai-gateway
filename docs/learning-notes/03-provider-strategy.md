@@ -1,5 +1,16 @@
 # Learning Note: Provider Strategy For LLMs And Embeddings
 
+> **Status update:** The embedding recommendation below (direct OpenAI) was the
+> early plan captured while coding. The final decision changed to Hugging Face
+> TEI (Text Embeddings Inference) as the preferred local hosted backend, with
+> deterministic embeddings as the minimal-local default and direct OpenAI as a
+> hosted baseline. See [ADR 006](../adr/006-embedding-backend-strategy.md) and
+> [learning note 08](08-embedding-backend-strategy.md) for the decision of
+> record. The chat-provider reasoning (the gateway owns routing; OpenRouter is a
+> backend, not the architectural center) still holds and is reflected in
+> [ADR 004](../adr/004-model-routing-policy.md). This note is kept as a record
+> of the original thinking.
+
 This note captures a practical provider strategy for this repo.
 
 The goal is to balance:

@@ -10,17 +10,25 @@ from genai_gateway.evaluation.retrieval import (
     EvaluationDataset,
     EvaluationSample,
     LLMRetrievalSampleGenerator,
+    RelevanceJudge,
     RetrievalEvaluationRunner,
     build_evaluation_dataset,
+    pool_relevant_chunks,
 )
-from genai_gateway.schemas.response_schema import TokenUsage
+from genai_gateway.schemas.response_schema import ProviderGenerationMetadata, TokenUsage
 
 
 class FakeRetrievalService:
     def __init__(self, responses: dict[str, list[dict]]) -> None:
         self.responses = responses
 
-    def retrieve(self, question: str, task: str, top_k: int | None = None) -> list[dict]:
+    def retrieve(
+        self,
+        question: str,
+        task: str,
+        top_k: int | None = None,
+        retrieval_mode: str | None = None,
+    ) -> list[dict]:
         return self.responses[question][:top_k]
 
 
@@ -32,8 +40,40 @@ class FakeChatProvider:
     def model_name(self) -> str | None:
         return "fake-model"
 
-    def generate(self, prompt: str, question: str) -> tuple[str, TokenUsage]:
-        return self.answer, TokenUsage(prompt_tokens=12, completion_tokens=7, total_tokens=19)
+    def generate(
+        self, prompt: str, question: str
+    ) -> tuple[str, TokenUsage, ProviderGenerationMetadata]:
+        return (
+            self.answer,
+            TokenUsage(prompt_tokens=12, completion_tokens=7, total_tokens=19),
+            ProviderGenerationMetadata(),
+        )
+
+
+class ScriptedChatProvider:
+    """Return canned answers keyed by a substring found in the prompt."""
+
+    def __init__(self, answers_by_marker: dict[str, str], default: str = "no") -> None:
+        self.answers_by_marker = answers_by_marker
+        self.default = default
+
+    @property
+    def model_name(self) -> str | None:
+        return "fake-judge"
+
+    def generate(
+        self, prompt: str, question: str
+    ) -> tuple[str, TokenUsage, ProviderGenerationMetadata]:
+        answer = self.default
+        for marker, response in self.answers_by_marker.items():
+            if marker in prompt:
+                answer = response
+                break
+        return (
+            answer,
+            TokenUsage(prompt_tokens=5, completion_tokens=1, total_tokens=6),
+            ProviderGenerationMetadata(),
+        )
 
 
 class FakeReranker:
@@ -147,6 +187,75 @@ class TestRetrievalEvaluationGeneration:
         assert sample.question.startswith("What does Article 5, Clause 1 say about obligations")
         assert sample.gold_answer is not None
         assert "generation_note" in sample.metadata
+
+
+class TestRelevancePooling:
+    def test_pooling_adds_judged_relevant_candidates(self) -> None:
+        dataset = EvaluationDataset(
+            samples=[
+                EvaluationSample(
+                    question="What are the obligations?",
+                    relevant_chunk_ids=["doc::chunk::0"],
+                    metadata={"review_status": "auto_generated"},
+                )
+            ]
+        )
+        retrieval = FakeRetrievalService(
+            {
+                "What are the obligations?": [
+                    {"chunk_id": "doc::chunk::0", "content": "source obligations passage"},
+                    {"chunk_id": "doc::chunk::1", "content": "RELEVANT duplicate obligations"},
+                    {"chunk_id": "doc::chunk::2", "content": "unrelated penalties text"},
+                ]
+            }
+        )
+        judge = RelevanceJudge(
+            chat_provider=ScriptedChatProvider({"RELEVANT": "yes"}, default="no"),
+            provider_name="openrouter",
+            model_name="judge-model",
+            retrieval_service=retrieval,
+            pool_top_k=10,
+            pool_retrieval_modes=["dense", "lexical"],
+        )
+
+        pool_relevant_chunks(dataset, task="legal_qa", judge=judge)
+
+        sample = dataset.samples[0]
+        assert sample.relevant_chunk_ids == ["doc::chunk::0", "doc::chunk::1"]
+        pooling = sample.metadata["relevance_pooling"]
+        assert pooling["judge_provider"] == "openrouter"
+        assert pooling["judge_model"] == "judge-model"
+        assert pooling["judged_relevant"] == ["doc::chunk::1"]
+        # source chunk is never re-judged; only non-source candidates are
+        assert set(pooling["candidates_judged"]) == {"doc::chunk::1", "doc::chunk::2"}
+        assert pooling["pool_retrieval_modes"] == ["dense", "lexical"]
+
+    def test_pooling_keeps_single_positive_when_nothing_judged_relevant(self) -> None:
+        dataset = EvaluationDataset(
+            samples=[
+                EvaluationSample(question="Q", relevant_chunk_ids=["doc::chunk::0"])
+            ]
+        )
+        retrieval = FakeRetrievalService(
+            {
+                "Q": [
+                    {"chunk_id": "doc::chunk::0", "content": "source"},
+                    {"chunk_id": "doc::chunk::5", "content": "other"},
+                ]
+            }
+        )
+        judge = RelevanceJudge(
+            chat_provider=ScriptedChatProvider({}, default="no"),
+            provider_name="openai",
+            model_name="m",
+            retrieval_service=retrieval,
+        )
+
+        pool_relevant_chunks(dataset, task="legal_qa", judge=judge)
+
+        sample = dataset.samples[0]
+        assert sample.relevant_chunk_ids == ["doc::chunk::0"]
+        assert sample.metadata["relevance_pooling"]["judged_relevant"] == []
 
 
 class TestRetrievalEvaluationRunner:

@@ -138,9 +138,9 @@ The application code should stay mostly the same, with the main change being `DA
 
 The database stack is represented in these files:
 
-- [models.py](/Users/lisiqi/repository/genai-gateway/database/models.py): ORM models
-- [session.py](/Users/lisiqi/repository/genai-gateway/database/session.py): engine and session setup
-- [env.py](/Users/lisiqi/repository/genai-gateway/alembic/env.py): Alembic wiring
-- [20260312_000001_initial_schema.py](/Users/lisiqi/repository/genai-gateway/alembic/versions/20260312_000001_initial_schema.py): initial schema migration
+- [models.py](/database/models.py): ORM models
+- [session.py](/database/session.py): engine and session setup
+- [env.py](/alembic/env.py): Alembic wiring
+- [20260312_000001_initial_schema.py](/alembic/versions/20260312_000001_initial_schema.py): initial schema migration
 
 Document metadata also stores the embedding configuration used during ingestion so retrieval can fail fast if the active embedding provider/model no longer matches the stored corpus.
