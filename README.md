@@ -21,20 +21,43 @@ This project takes a different approach:
 
 The objective is not to build a universal product, but to model a **production-style GenAI system boundary** with clear responsibilities and extensibility.
 
+## Tech Stack
+
+| Layer | Technology | Role in the gateway |
+|---|---|---|
+| **Language** | Python ≥ 3.11 | Implementation language |
+| **API / Service** | FastAPI · Uvicorn · Pydantic v2 | HTTP gateway, typed request/response schemas, validation |
+| **Config** | pydantic-settings · python-dotenv | Settings and environment management |
+| **LLM providers (chat)** | OpenAI · OpenRouter (via OpenAI SDK + `base_url`) | Provider-agnostic chat completions |
+| **Embedding providers** | Hugging Face TEI (Qwen3-Embedding-0.6B) · OpenAI · deterministic (dev/test) | Swappable embedding backends |
+| **Routing** | `ModelRoutingPolicy` (config-driven) | Task + quality-mode model selection with fallback |
+| **Prompt management** | `PromptManager` + `prompt_versions` table | Task-aware, versioned prompt templates |
+| **Retrieval (RAG)** | pgvector (dense) · lexical backend toggle: Postgres FTS or ParadeDB `pg_search` BM25 · hybrid with RRF | Dense, lexical, and hybrid retrieval modes |
+| **Reranking** | sentence-transformers `CrossEncoder` (optional) · pass-through default | Optional cross-encoder reranking |
+| **Ingestion** | PyMuPDF · custom chunking / metadata | PDF parsing → article/clause-aware chunking → indexing |
+| **Agent runtime** | Custom: planner · executor · orchestrator · typed state | Controlled multi-step runtime with per-step checkpoints |
+| **Tools (typed capabilities)** | `retrieve_context` · `answer_question` · `draft_email` | Bounded, typed runtime capabilities |
+| **Guardrails** | scope classification · retrieval-evidence assessment | Runtime safety gates / abstention |
+| **Evaluation** | groundedness · quality · retrieval harness (datasets / generation / metrics · LLM-judge relevance pooling) · latency · cost | Evaluation embedded in execution + offline retrieval benchmark |
+| **Observability** | request logger · workflow tracing · `query_logs`, `evaluations` tables | Persisted traces for request and agent runs |
+| **Persistence** | PostgreSQL 16 (ParadeDB image) · pgvector · `pg_search` (BM25) · SQLAlchemy 2.0 · psycopg 3 · Alembic | Relational + vector + BM25 store, ORM, migrations |
+| **Frontend / demo** | Streamlit · legal-doc-QA reference app | Dashboard + reference workload |
+| **Tooling** | Docker Compose · uv · pytest · ruff · ADRs | Local infra, dependency management, tests, lint, decision records |
+
 ## Conceptual Model
 
 This project can be viewed as a runtime layer for GenAI systems, similar to how an operating system abstracts and orchestrates hardware resources for applications.
 
 ```text
-Applications (QA, summarization, etc.)
+Applications (Legal QA · future summarization / classification)
         │
         ▼
 GenAI Runtime / Gateway
-(prompt, retrieval, routing, evaluation)
+(prompt · guardrails · retrieval · reranking · routing · evaluation · agent runtime)
         │
         ▼
-LLM Providers + Retrieval Systems
-(OpenAI, Azure, vector DB, etc.)
+LLM Providers + Retrieval Store
+(OpenAI · OpenRouter chat · TEI / OpenAI embeddings · Postgres: pgvector + pg_search)
 ```
 
 ## Example Application
@@ -99,33 +122,37 @@ This project intentionally implements a **lightweight orchestration runtime** to
 └──────────┬──────────┘
            │
            ▼
-┌─────────────────────┐
-│   GenAI Gateway     │
-│ • prompt versioning │
-│ • model routing     │
-│ • logging           │
-│ • eval hooks        │
-└───────┬─────┬───────┘
-        │     │
-        ▼     ▼
-┌──────────┐ ┌──────────────┐
-│Retrieval │ │ Model Backend│
-│• vector  │ │• OpenAI      │
-│• top-k   │ │• Azure OpenAI│
-└────┬─────┘ └──────┬───────┘
-     │              │
-     └──────┬───────┘
-            ▼
-┌─────────────────────┐
-│ Evaluation Layer    │
-│ • groundedness      │
-│ • latency           │
-│ • token cost        │
-└──────────┬──────────┘
+┌──────────────────────┐
+│    GenAI Gateway     │
+│ • prompt versioning  │
+│ • guardrails         │
+│ • model routing      │
+│ • logging / tracing  │
+│ • eval hooks         │
+└───────┬──────┬───────┘
+        │      │
+        ▼      ▼
+┌────────────────────┐ ┌──────────────────┐
+│ Retrieval          │ │ Model Backends   │
+│ • dense (pgvector) │ │ • OpenAI         │
+│ • lexical FTS/BM25 │ │ • OpenRouter     │
+│ • hybrid (RRF)     │ │ • routing +      │
+│ • rerank           │ │   fallback       │
+└────┬───────────────┘ └──────┬───────────┘
+     │                        │
+     └──────────┬─────────────┘
+                ▼
+┌──────────────────────────┐
+│ Evaluation Layer         │
+│ • groundedness/relevance │
+│ • citation/completeness  │
+│ • latency · token cost   │
+└──────────┬───────────────┘
            ▼
-┌─────────────────────┐
-│ Dashboard / Storage │
-└─────────────────────┘
+┌──────────────────────────┐
+│ Dashboard / Storage      │
+│ Postgres (ParadeDB)      │
+└──────────────────────────┘
 ```
 
 ## High-Level Architecture
@@ -143,8 +170,11 @@ This project intentionally implements a **lightweight orchestration runtime** to
 │        GenAI Gateway API     │
 │  • Request validation        │
 │  • Prompt versioning         │
-│  • Model routing             │
+│  • Guardrails (scope/evidence)│
+│  • Model routing + fallback  │
 │  • Retrieval orchestration   │
+│  • Reranking                 │
+│  • Agent runtime (multi-step)│
 │  • Logging / tracing         │
 │  • Evaluation hooks          │
 └───────────────┬──────────────┘
@@ -152,30 +182,33 @@ This project intentionally implements a **lightweight orchestration runtime** to
       ┌─────────┴─────────┐
       │                   │
       ▼                   ▼
-┌───────────────┐   ┌────────────────┐
-│ Retrieval     │   │ Model Backends │
-│ Layer         │   │                │
-│ • Chunking    │   │ • OpenAI       │
-│ • Embeddings  │   │ • Azure OpenAI │
-│ • Vector DB   │   │ • Open model   │
-│ • Top-k docs  │   │                │
-└───────┬───────┘   └────────────────┘
+┌────────────────────────┐   ┌────────────────────┐
+│ Retrieval Layer        │   │ Model Backends     │
+│ • Chunking (article/   │   │ • OpenAI           │
+│   clause-aware)        │   │ • OpenRouter       │
+│ • Embeddings (TEI/     │   │   (routing +       │
+│   OpenAI/deterministic)│   │   fallback)        │
+│ • Dense (pgvector)     │   │                    │
+│ • Lexical (FTS / BM25) │   └────────────────────┘
+│ • Hybrid (RRF) + rerank│
+└───────┬────────────────┘
         │
         ▼
 ┌──────────────────────────────┐
 │ Evaluation & Observability   │
-│ • Groundedness               │
-│ • Latency                    │
-│ • Token cost                 │
-│ • Prompt comparison          │
+│ • Groundedness / relevance   │
+│ • Citation / completeness    │
+│ • Latency · token/provider cost│
+│ • Prompt & retrieval eval    │
 └───────────────┬──────────────┘
                 │
                 ▼
 ┌──────────────────────────────┐
 │ Storage / Dashboard          │
-│ • Postgres                   │
-│ • Prompt registry            │
-│ • Request logs               │
+│ • Postgres (ParadeDB:        │
+│   pgvector + pg_search)      │
+│ • Prompt versions            │
+│ • Query logs + traces        │
 │ • Evaluation results         │
 │ • Streamlit dashboard        │
 └──────────────────────────────┘
@@ -544,9 +577,9 @@ docker compose up -d
 
 This starts:
 
-- Postgres with `pgvector`
+- Postgres (ParadeDB image) with `pgvector` for dense retrieval and `pg_search` for BM25 lexical retrieval
 
-On Apple Silicon, this is the intended default local infra command. TEI should run as a local `text-embeddings-router` process, not through Docker.
+On Apple Silicon, this is the intended default local infra command (the ParadeDB image is multi-arch). TEI should run as a local `text-embeddings-router` process, not through Docker.
 
 If you want TEI in Docker on a compatible Linux/x86 environment:
 
@@ -590,97 +623,26 @@ Compare reranking on vs off in the same batch:
 uv run python scripts/run_experiment.py --reranker-types pass_through cross_encoder
 ```
 
-Generate a heuristic offline retrieval-evaluation dataset:
+### Offline retrieval evaluation
+
+The full workflow — generate a benchmark dataset, optionally enrich labels with an
+LLM judge, review, run IR metrics, and compare configurations — has its own manual
+with every parameter documented: **[docs/retrieval-evaluation.md](docs/retrieval-evaluation.md)**.
+
+Quickstart:
 
 ```bash
-uv run python scripts/generate_retrieval_eval_dataset.py --max-samples 100
-```
-
-Generate an LLM-authored retrieval-evaluation dataset using the configured `legal_qa.cheap` route:
-
-```bash
+# 1. generate a benchmark dataset from the ingested corpus
 uv run python scripts/generate_retrieval_eval_dataset.py --generation-method llm --max-samples 100
-```
 
-Override the generation provider/model explicitly:
+# 2. run IR metrics (writes a report under artifacts/retrieval_eval/)
+uv run python scripts/run_retrieval_eval.py --task legal_qa \
+  --dataset apps/legal_doc_qa/data/eval/legal_qa_retrieval_samples.llm.jsonl
 
-```bash
-uv run python scripts/generate_retrieval_eval_dataset.py --generation-method llm --generation-provider openrouter --generation-model qwen/qwen3-next-80b-a3b-instruct
-```
-
-Run offline retrieval evaluation against that dataset:
-
-```bash
-uv run python scripts/run_retrieval_eval.py --task legal_qa --dataset apps/legal_doc_qa/data/eval/legal_qa_retrieval_samples.heuristic.jsonl
-```
-
-By default, the runner now writes a timestamped report under:
-
-```text
-artifacts/retrieval_eval/
-```
-
-The saved JSON report includes aggregate metrics, per-sample results, and run config such as:
-
-- retrieval mode
-- dense / lexical candidate pool settings
-- RRF setting
-- embedding provider and model
-- dataset path
-- dataset generation method
-- review-status filter
-
-Review generated samples before treating them as benchmark ground truth:
-
-```bash
-uv run python scripts/review_retrieval_eval_dataset.py --dataset apps/legal_doc_qa/data/eval/legal_qa_retrieval_samples.heuristic.jsonl --summary
-uv run python scripts/review_retrieval_eval_dataset.py --dataset apps/legal_doc_qa/data/eval/legal_qa_retrieval_samples.heuristic.jsonl --index 0 --show
-uv run python scripts/review_retrieval_eval_dataset.py --dataset apps/legal_doc_qa/data/eval/legal_qa_retrieval_samples.heuristic.jsonl --index 0 --set-status approved
-```
-
-Run retrieval evaluation only on reviewed or approved samples:
-
-```bash
-uv run python scripts/run_retrieval_eval.py --task legal_qa --dataset apps/legal_doc_qa/data/eval/legal_qa_retrieval_samples.heuristic.jsonl --review-statuses approved reviewed
-```
-
-Run the full 6-run matrix across:
-
-- `heuristic` and `llm` datasets
-- `dense`, `lexical`, and `hybrid` retrieval modes
-
-```bash
+# 3. compare a batch of configs (dense/lexical/hybrid, fts/bm25, rerankers)
 bash scripts/run_retrieval_eval_matrix.sh
+uv run python scripts/compare_retrieval_eval_reports.py --experiment-id <id>
 ```
-
-Run the hybrid retrieval + reranker comparison matrix:
-
-```bash
-bash scripts/run_retrieval_reranker_eval_matrix.sh
-```
-
-The matrix script assigns one shared experiment id to all 6 runs and prints it before starting.
-
-Compare one experiment directly:
-
-```bash
-uv run python scripts/compare_retrieval_eval_reports.py --experiment-id 20260326T183708Z
-```
-
-This also saves a comparison artifact under:
-
-```text
-artifacts/retrieval_eval_comparisons/
-```
-
-By default, the comparison table includes:
-
-- `hit_rate@1`
-- `hit_rate@3`
-- `mrr`
-- `ndcg@3`
-- `precision@1`
-- `precision@3`
 
 Retrieval defaults to hybrid search using:
 
@@ -692,6 +654,7 @@ Relevant settings in `.env`:
 
 ```env
 RETRIEVAL_MODE=hybrid
+RETRIEVAL_LEXICAL_BACKEND=fts
 RETRIEVAL_TOP_K=4
 RETRIEVAL_DENSE_TOP_K=12
 RETRIEVAL_LEXICAL_TOP_K=12
@@ -704,6 +667,35 @@ Apply the FTS index migration before using lexical or hybrid retrieval:
 uv run alembic upgrade head
 ```
 
+### Lexical backend: Postgres FTS or BM25
+
+The lexical leg (used by `lexical` mode and the lexical half of `hybrid`) supports two backends via `RETRIEVAL_LEXICAL_BACKEND` (ADR 014):
+
+- `bm25` — true BM25 via the ParadeDB `pg_search` extension, index-backed and still inside Postgres. **This is the default in the shipped `.env` / `.env.example`**, because the bundled `docker-compose.yml` always provides `pg_search`.
+- `fts` — Postgres full-text search with `ts_rank_cd` ranking. No extension required.
+
+The two-level default is intentional: the **code default is `fts`** (so the app runs against any vanilla Postgres — protecting the cloud-agnostic story in ADR 001, since managed targets like RDS / Cloud SQL / Azure do not ship `pg_search`), while the **shipped stack defaults to `bm25`** via `.env`. `fts` stays available as the portability fallback and as one arm of the `fts`-vs-`bm25` benchmark.
+
+The Docker Postgres image is `paradedb/paradedb` (pinned to a PostgreSQL 16 tag), which bundles `pg_search` (BM25) **and** `pgvector`, so dense, FTS, and BM25 retrieval all run in one container:
+
+```bash
+# (re)create the DB on the ParadeDB image, then migrate — this creates the
+# pg_search extension + BM25 index (migration 20260701_000011)
+docker compose up -d
+uv run alembic upgrade head
+# with bm25 in .env, the gateway now uses BM25 for the lexical leg
+uv run uvicorn genai_gateway.main:app --reload
+```
+
+Switching backends needs no re-ingestion — BM25 indexes the existing chunk `content`. Because `pg_search`'s operator/score API is version-sensitive, the image is pinned in `docker-compose.yml` (validated on `paradedb/paradedb:0.24.1-pg16`); `latest` tracks PostgreSQL 18 and breaks the volume mount, so keep a PG16 tag.
+
+Benchmark the two backends head-to-head with the retrieval-evaluation matrix:
+
+```bash
+RETRIEVAL_LEXICAL_BACKEND=fts  bash scripts/run_retrieval_eval_matrix.sh
+RETRIEVAL_LEXICAL_BACKEND=bm25 bash scripts/run_retrieval_eval_matrix.sh
+```
+
 Run the dashboard:
 
 ```bash
@@ -711,6 +703,8 @@ uv run streamlit run dashboard/app.py
 ```
 
 The dashboard reads runtime data from Postgres, with a JSONL fallback for local resilience. It surfaces both request-response runs and controlled agent runs, including retrieval mode, reranker settings, guardrail abstentions, grouped answer-quality metrics, provider-reported cost fields, and stored agent execution reports.
+
+The legal QA demo frontend now uses a session-aware `/chat` interface on top of those runtime paths. A conversational router decides whether each turn should use standard QA or the controlled workflow runtime.
 
 Run the example legal document Q&A backend:
 
@@ -765,6 +759,10 @@ This repository also captures design decisions as lightweight ADRs in `docs/adr/
 - [ADR 008: Hybrid retrieval architecture](docs/adr/008-hybrid-retrieval-architecture.md)
 - [ADR 009: Runtime guardrails](docs/adr/009-runtime-guardrails.md)
 - [ADR 010: Controlled agent runtime phase 1](docs/adr/010-controlled-agent-runtime-phase-1.md)
+- [ADR 011: Conversational runtime interface](docs/adr/011-conversational-runtime-interface.md)
+- [ADR 012: Multi-agent orchestration (supervisor-worker)](docs/adr/012-multi-agent-orchestration.md)
+- [ADR 013: Persistent memory (session and long-term)](docs/adr/013-persistent-memory.md)
+- [ADR 014: Postgres-native BM25 lexical retrieval](docs/adr/014-postgres-native-bm25-lexical-retrieval.md)
 
 ## Learning Notes
 
@@ -775,6 +773,7 @@ Longer explanatory notes live in `docs/learning-notes/`.
 - [Database stack](docs/learning-notes/database-stack.md)
 - [Chunking logic](docs/learning-notes/chunking-logic.md)
 - [Controlled agent runtime](docs/learning-notes/controlled-agent-runtime.md)
+- [Conversational runtime interface](docs/learning-notes/conversational-runtime-interface.md)
 - [Evaluation architecture](docs/learning-notes/evaluation-architecture.md)
 - [Guardrails](docs/learning-notes/guardrails.md)
 - [PDF extraction strategy](docs/learning-notes/pdf-extraction-strategy.md)

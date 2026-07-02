@@ -62,6 +62,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional list of review statuses to include, e.g. approved reviewed.",
     )
     parser.add_argument(
+        "--exclude-rejected",
+        action="store_true",
+        help="Drop samples marked review_status=rejected, even on an otherwise unfiltered run.",
+    )
+    parser.add_argument(
         "--reranker-type",
         default=None,
         help="Optional reranker override such as pass_through or cross_encoder.",
@@ -96,9 +101,17 @@ def main() -> None:
     elif generation_methods:
         dataset_generation_method = "mixed"
     selected_review_statuses: list[str] | None = None
-    if args.review_statuses is not None:
-        selected_review_statuses = sorted({status.strip() for status in args.review_statuses})
-        dataset = dataset.filtered(review_statuses=set(selected_review_statuses))
+    exclude_statuses = {"rejected"} if args.exclude_rejected else None
+    if args.review_statuses is not None or exclude_statuses is not None:
+        selected_review_statuses = (
+            sorted({status.strip() for status in args.review_statuses})
+            if args.review_statuses is not None
+            else None
+        )
+        dataset = dataset.filtered(
+            review_statuses=set(selected_review_statuses) if selected_review_statuses else None,
+            exclude_statuses=exclude_statuses,
+        )
     runner = RetrievalEvaluationRunner()
     report = runner.run(
         dataset,
@@ -113,6 +126,7 @@ def main() -> None:
             "dataset_name": dataset_path.name,
             "dataset_generation_method": dataset_generation_method,
             "review_statuses": selected_review_statuses,
+            "excluded_statuses": sorted(exclude_statuses) if exclude_statuses else None,
         },
     )
 

@@ -21,6 +21,7 @@ from genai_gateway.schemas.response_schema import ProviderGenerationMetadata, To
 class FakeRetrievalService:
     def __init__(self, responses: dict[str, list[dict]]) -> None:
         self.responses = responses
+        self.calls: list[tuple[str | None, str | None]] = []
 
     def retrieve(
         self,
@@ -28,8 +29,29 @@ class FakeRetrievalService:
         task: str,
         top_k: int | None = None,
         retrieval_mode: str | None = None,
+        lexical_backend: str | None = None,
     ) -> list[dict]:
+        self.calls.append((retrieval_mode, lexical_backend))
         return self.responses[question][:top_k]
+
+
+class BackendAwareRetrievalService:
+    """Returns different candidates per (mode, lexical_backend) for pooling tests."""
+
+    def __init__(self, by_key: dict[tuple[str, str | None], list[dict]]) -> None:
+        self.by_key = by_key
+        self.calls: list[tuple[str | None, str | None]] = []
+
+    def retrieve(
+        self,
+        question: str,
+        task: str,
+        top_k: int | None = None,
+        retrieval_mode: str | None = None,
+        lexical_backend: str | None = None,
+    ) -> list[dict]:
+        self.calls.append((retrieval_mode, lexical_backend))
+        return self.by_key.get((str(retrieval_mode), lexical_backend), [])[:top_k]
 
 
 class FakeChatProvider:
@@ -163,6 +185,28 @@ class TestRetrievalEvaluationGeneration:
         assert sample.metadata["generator_provider"] == "openrouter"
         assert sample.metadata["generator_model"] == "test-model"
 
+    def test_llm_prompt_does_not_leak_article_labels_and_asks_for_paraphrase(self) -> None:
+        from genai_gateway.evaluation.retrieval.generation import _build_llm_prompt
+
+        chunk = CorpusChunk(
+            source_path="doc.pdf",
+            chunk_index=0,
+            content="Providers shall assess systemic risks arising from their services.",
+            metadata={"article_number": "5", "clause_number": ["1"], "article_title": "Risk assessment"},
+            title="DSA",
+        )
+        prompt = _build_llm_prompt(chunk)
+
+        # the paraphrase guardrail is present
+        assert "Do NOT quote exact phrases, article numbers, or section headings" in prompt
+        # the article/clause identifiers are the label, not prompt input — not injected
+        assert "Location:" not in prompt
+        assert "Article title:" not in prompt
+        assert "Chunk id:" not in prompt
+        assert "Risk assessment" not in prompt
+        # the chunk content itself is still provided
+        assert "systemic risks" in prompt
+
     def test_llm_generation_falls_back_to_heuristic_when_json_is_missing(self) -> None:
         generator = LLMRetrievalSampleGenerator(
             chat_provider=FakeChatProvider("not valid json"),
@@ -229,6 +273,43 @@ class TestRelevancePooling:
         # source chunk is never re-judged; only non-source candidates are
         assert set(pooling["candidates_judged"]) == {"doc::chunk::1", "doc::chunk::2"}
         assert pooling["pool_retrieval_modes"] == ["dense", "lexical"]
+
+    def test_mixed_backend_pools_candidates_from_both_fts_and_bm25(self) -> None:
+        from genai_gateway.evaluation.retrieval import resolve_pool_lexical_backends
+
+        dataset = EvaluationDataset(
+            samples=[EvaluationSample(question="Q", relevant_chunk_ids=["doc::chunk::0"])]
+        )
+        retrieval = BackendAwareRetrievalService(
+            {
+                ("dense", None): [{"chunk_id": "doc::chunk::0", "content": "source"}],
+                ("lexical", "fts"): [{"chunk_id": "doc::chunk::fts", "content": "RELEVANT fts hit"}],
+                ("lexical", "bm25"): [{"chunk_id": "doc::chunk::bm25", "content": "RELEVANT bm25 hit"}],
+            }
+        )
+        judge = RelevanceJudge(
+            chat_provider=ScriptedChatProvider({"RELEVANT": "yes"}, default="no"),
+            provider_name="openrouter",
+            model_name="judge-model",
+            retrieval_service=retrieval,
+            pool_lexical_backends=resolve_pool_lexical_backends("mixed"),
+        )
+
+        pool_relevant_chunks(dataset, task="legal_qa", judge=judge)
+
+        sample = dataset.samples[0]
+        # both lexical backends contributed judged-relevant candidates
+        assert set(sample.relevant_chunk_ids) == {"doc::chunk::0", "doc::chunk::fts", "doc::chunk::bm25"}
+        assert ("lexical", "fts") in retrieval.calls
+        assert ("lexical", "bm25") in retrieval.calls
+        assert sample.metadata["relevance_pooling"]["pool_lexical_backends"] == ["fts", "bm25"]
+
+    def test_resolve_pool_lexical_backends(self) -> None:
+        from genai_gateway.evaluation.retrieval import resolve_pool_lexical_backends
+
+        assert resolve_pool_lexical_backends("bm25") == ["bm25"]
+        assert resolve_pool_lexical_backends("fts") == ["fts"]
+        assert resolve_pool_lexical_backends("mixed") == ["fts", "bm25"]
 
     def test_pooling_keeps_single_positive_when_nothing_judged_relevant(self) -> None:
         dataset = EvaluationDataset(

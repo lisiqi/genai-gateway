@@ -204,6 +204,62 @@ class RetrievalRepository:
         rows = self.session.execute(stmt).all()
         return self._rows_to_chunks(rows, score_key="lexical_score", source_label="lexical")
 
+    def search_bm25_chunks(
+        self,
+        *,
+        task: str,
+        query_text: str | None,
+        article_number: str | None = None,
+        clause_number: str | None = None,
+        limit: int,
+    ) -> list[dict]:
+        """Search chunks with a ParadeDB pg_search BM25 index (ADR 014).
+
+        `query_text` is the space-joined BM25 match string. The operator/score
+        API (`@@@`, ``paradedb.score``) is version-sensitive; keep it aligned
+        with the pinned ParadeDB image tag.
+        """
+        metadata_jsonb = cast(DocumentChunk.metadata_json, JSONB)
+        score_expr = literal(0.0).label("score")
+        stmt = (
+            select(
+                DocumentChunk.id,
+                DocumentChunk.chunk_index,
+                DocumentChunk.content,
+                DocumentChunk.metadata_json,
+                Document.source_path,
+                Document.title,
+                score_expr,
+            )
+            .join(Document, Document.id == DocumentChunk.document_id)
+            .where(Document.task == task)
+        )
+
+        if article_number:
+            stmt = stmt.where(metadata_jsonb.contains({"article_number": str(article_number)}))
+        if clause_number:
+            stmt = stmt.where(metadata_jsonb.contains({"clause_number": [int(clause_number)]}))
+
+        if query_text:
+            score_expr = func.paradedb.score(DocumentChunk.id).label("score")
+            stmt = stmt.with_only_columns(
+                DocumentChunk.id,
+                DocumentChunk.chunk_index,
+                DocumentChunk.content,
+                DocumentChunk.metadata_json,
+                Document.source_path,
+                Document.title,
+                score_expr,
+            ).where(DocumentChunk.content.op("@@@")(query_text))
+            stmt = stmt.order_by(score_expr.desc(), DocumentChunk.id.asc())
+        else:
+            stmt = stmt.order_by(DocumentChunk.chunk_index.asc(), DocumentChunk.id.asc())
+
+        stmt = stmt.limit(limit)
+
+        rows = self.session.execute(stmt).all()
+        return self._rows_to_chunks(rows, score_key="lexical_score", source_label="lexical")
+
     @staticmethod
     def _rows_to_chunks(rows: list, *, score_key: str, source_label: str) -> list[dict]:
         """Normalize SQL rows into the shared chunk response shape."""

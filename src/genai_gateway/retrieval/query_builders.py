@@ -14,6 +14,8 @@ class LexicalQuery:
     tsquery_text: str | None
     article_number: str | None = None
     clause_number: str | None = None
+    match_text: str | None = None
+    """Space-joined terms for BM25 (`pg_search`) matching; see ADR 014."""
 
 
 class LexicalQueryBuilder(Protocol):
@@ -71,4 +73,5 @@ class DefaultLexicalQueryBuilder:
             tsquery_text=" | ".join(terms) if terms else None,
             article_number=article_match.group(1) if article_match else None,
             clause_number=clause_match.group(1) if clause_match else None,
+            match_text=" ".join(terms) if terms else None,
         )

@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     default_prompt_version: str = "v1"
     retrieval_query_builders_json: str = ""
     retrieval_mode: str = "hybrid"
+    retrieval_lexical_backend: str = "fts"
     retrieval_top_k: int = 4
     retrieval_dense_top_k: int = 12
     retrieval_lexical_top_k: int = 12

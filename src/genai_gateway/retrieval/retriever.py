@@ -31,20 +31,25 @@ class RetrievalService:
         task: str,
         top_k: int | None = None,
         retrieval_mode: str | None = None,
+        lexical_backend: str | None = None,
     ) -> list[dict]:
-        """Return the top-k similar chunks for the configured task."""
+        """Return the top-k similar chunks for the configured task.
+
+        `lexical_backend` optionally overrides the configured backend (`fts`/`bm25`)
+        for the lexical leg of this call only; defaults to the setting.
+        """
         k = top_k or self.settings.retrieval_top_k
         resolved_retrieval_mode = self.resolve_retrieval_mode(retrieval_mode)
         lexical_query = self.build_lexical_query(question=question, task=task)
         with SessionLocal() as session:
             repository = RetrievalRepository(session)
             if resolved_retrieval_mode == "lexical":
-                return repository.search_lexical_chunks(
+                return self._search_lexical(
+                    repository=repository,
                     task=task,
-                    query_text=lexical_query.tsquery_text,
-                    article_number=lexical_query.article_number,
-                    clause_number=lexical_query.clause_number,
+                    lexical_query=lexical_query,
                     limit=k,
+                    backend_override=lexical_backend,
                 )
 
             active_embedding_config = self.embedding_provider.embedding_config()
@@ -66,12 +71,12 @@ class RetrievalService:
                     query_embedding=query_embedding,
                     limit=max(k, self.settings.retrieval_dense_top_k),
                 )
-                lexical_chunks = repository.search_lexical_chunks(
+                lexical_chunks = self._search_lexical(
+                    repository=repository,
                     task=task,
-                    query_text=lexical_query.tsquery_text,
-                    article_number=lexical_query.article_number,
-                    clause_number=lexical_query.clause_number,
+                    lexical_query=lexical_query,
                     limit=max(k, self.settings.retrieval_lexical_top_k),
+                    backend_override=lexical_backend,
                 )
                 return self._fuse_reciprocal_rank(
                     dense_chunks=dense_chunks,
@@ -88,6 +93,41 @@ class RetrievalService:
     def resolve_retrieval_mode(self, override: str | None = None) -> str:
         """Resolve and normalize the retrieval mode for a request."""
         return (override or self.settings.retrieval_mode).strip().lower()
+
+    def resolve_lexical_backend(self, override: str | None = None) -> str:
+        """Resolve and normalize the lexical retrieval backend."""
+        return (override or self.settings.retrieval_lexical_backend).strip().lower()
+
+    def _search_lexical(
+        self,
+        *,
+        repository: RetrievalRepository,
+        task: str,
+        lexical_query: LexicalQuery,
+        limit: int,
+        backend_override: str | None = None,
+    ) -> list[dict]:
+        """Dispatch the lexical leg to Postgres FTS or ParadeDB BM25 (ADR 014)."""
+        backend = self.resolve_lexical_backend(backend_override)
+        if backend == "fts":
+            return repository.search_lexical_chunks(
+                task=task,
+                query_text=lexical_query.tsquery_text,
+                article_number=lexical_query.article_number,
+                clause_number=lexical_query.clause_number,
+                limit=limit,
+            )
+        if backend == "bm25":
+            return repository.search_bm25_chunks(
+                task=task,
+                query_text=lexical_query.match_text,
+                article_number=lexical_query.article_number,
+                clause_number=lexical_query.clause_number,
+                limit=limit,
+            )
+        raise ValueError(
+            f"Unsupported lexical backend '{backend}'. Expected one of: fts, bm25."
+        )
 
     def build_lexical_query(self, *, question: str, task: str) -> LexicalQuery:
         """Build a lexical query using the task-specific or default builder."""

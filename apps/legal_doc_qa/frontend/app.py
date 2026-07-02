@@ -31,52 +31,21 @@ RERANKER_OPTIONS = {
 }
 
 
-def ask_backend(
+def chat_backend(
     *,
     backend_url: str,
-    question: str,
+    session_id: str | None,
+    message: str,
     quality_mode: str,
     prompt_version: str,
     top_k: int,
     reranker_type: str,
 ) -> dict:
-    """Call the example app backend over HTTP."""
+    """Call the conversational runtime endpoint over HTTP."""
     payload = json.dumps(
         {
-            "question": question,
-            "quality_mode": quality_mode,
-            "prompt_version": prompt_version,
-            "top_k": top_k,
-            "reranker_type": reranker_type,
-        }
-    ).encode("utf-8")
-    req = request.Request(
-        url=f"{backend_url.rstrip('/')}/ask",
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    with request.urlopen(req, timeout=60) as response:
-        return json.loads(response.read().decode("utf-8"))
-
-
-def run_agent_backend(
-    *,
-    backend_url: str,
-    instruction: str,
-    question: str,
-    recipient_email: str,
-    quality_mode: str,
-    prompt_version: str,
-    top_k: int,
-    reranker_type: str,
-) -> dict:
-    """Call the controlled agent runtime endpoint over HTTP."""
-    payload = json.dumps(
-        {
-            "instruction": instruction,
-            "question": question,
-            "recipient_email": recipient_email or None,
+            "session_id": session_id,
+            "message": message,
             "quality_mode": quality_mode,
             "prompt_version": prompt_version,
             "retrieval_mode": "hybrid",
@@ -85,7 +54,7 @@ def run_agent_backend(
         }
     ).encode("utf-8")
     req = request.Request(
-        url=f"{backend_url.rstrip('/')}/agent/run",
+        url=f"{backend_url.rstrip('/')}/chat",
         data=payload,
         headers={"Content-Type": "application/json"},
         method="POST",
@@ -276,8 +245,10 @@ def render_agent_result(payload: dict) -> None:
 
 
 st.set_page_config(page_title="Legal Doc Q&A", layout="wide")
-st.title("Legal Document Q&A")
-st.caption("Example application built on top of the genai_gateway runtime.")
+st.title("Legal Document Chat Runtime")
+st.caption(
+    "Session-aware legal QA chat that routes each turn into standard RAG or the controlled agent runtime."
+)
 
 st.sidebar.header("Settings")
 prompt_label = st.sidebar.selectbox("Answer style", options=list(PROMPT_OPTIONS), index=0)
@@ -286,6 +257,10 @@ quality_mode_label = st.sidebar.selectbox("Model mode", options=list(QUALITY_MOD
 reranker_label = st.sidebar.selectbox("Reranking", options=list(RERANKER_OPTIONS), index=1)
 st.sidebar.caption("Cross-encoder usually improves answer quality, but adds latency.")
 top_k = st.sidebar.slider("Retrieved chunks", min_value=1, max_value=10, value=4)
+if st.sidebar.button("Clear Conversation", use_container_width=True):
+    st.session_state.pop("chat_session_id", None)
+    st.session_state.pop("chat_messages", None)
+    st.session_state.pop("last_chat_payload", None)
 with st.sidebar.expander("Advanced", expanded=False):
     backend_url = st.text_input("Backend URL", value=DEFAULT_BACKEND_URL)
 
@@ -293,76 +268,87 @@ prompt_version = PROMPT_OPTIONS[prompt_label]["version"]
 quality_mode = QUALITY_MODE_OPTIONS[quality_mode_label]
 reranker_type = RERANKER_OPTIONS[reranker_label]
 
-qa_tab, agent_tab = st.tabs(["RAG Q&A", "Controlled Agent Runtime"])
+st.info(
+    "Ask legal questions normally, then follow up in the same chat. "
+    "If you ask to draft or send an email, the interface routes that turn into the controlled workflow."
+)
 
-with qa_tab:
-    question = st.text_area(
-        "Question",
-        value="What is the aim of this Regulation?",
-        height=120,
-        key="qa_question",
-    )
+if "chat_messages" not in st.session_state:
+    st.session_state.chat_messages = []
+if "chat_session_id" not in st.session_state:
+    st.session_state.chat_session_id = None
+if "last_chat_payload" not in st.session_state:
+    st.session_state.last_chat_payload = None
 
-    if st.button("Ask", type="primary", use_container_width=True, key="qa_ask"):
-        if not question.strip():
-            st.error("Question is required.")
-        else:
-            try:
-                payload = ask_backend(
-                    backend_url=backend_url,
-                    question=question.strip(),
-                    quality_mode=quality_mode,
-                    prompt_version=prompt_version,
-                    top_k=top_k,
-                    reranker_type=reranker_type,
-                )
-            except error.HTTPError as exc:
-                detail = exc.read().decode("utf-8", errors="ignore")
-                st.error(f"Backend returned HTTP {exc.code}: {detail}")
-            except Exception as exc:  # pragma: no cover - UI fallback
-                st.error(f"Request failed: {exc}")
-            else:
-                render_qa_result(payload)
+for message in st.session_state.chat_messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+        if message.get("caption"):
+            st.caption(message["caption"])
 
-with agent_tab:
-    st.caption("Phase 1 controlled workflow: retrieve context, answer the question, then draft a follow-up email.")
-    agent_instruction = st.text_area(
-        "Instruction",
-        value="Answer the question from the legal corpus and draft a follow-up email.",
-        height=100,
-        key="agent_instruction",
-    )
-    agent_question = st.text_area(
-        "Question",
-        value="What obligations apply to providers regarding illegal content notices?",
-        height=120,
-        key="agent_question",
-    )
-    agent_recipient = st.text_input(
-        "Recipient Email",
-        value="legal-team@example.com",
-        key="agent_recipient",
-    )
+user_message = st.chat_input(
+    "Ask a legal question or request a workflow like 'draft an email summarizing this answer'."
+)
+if user_message:
+    st.session_state.chat_messages.append({"role": "user", "content": user_message})
+    try:
+        payload = chat_backend(
+            backend_url=backend_url,
+            session_id=st.session_state.chat_session_id,
+            message=user_message,
+            quality_mode=quality_mode,
+            prompt_version=prompt_version,
+            top_k=top_k,
+            reranker_type=reranker_type,
+        )
+    except error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="ignore")
+        st.session_state.chat_messages.append(
+            {
+                "role": "assistant",
+                "content": f"Backend returned HTTP {exc.code}: {detail}",
+                "caption": "request failed",
+            }
+        )
+    except Exception as exc:  # pragma: no cover - UI fallback
+        st.session_state.chat_messages.append(
+            {
+                "role": "assistant",
+                "content": f"Request failed: {exc}",
+                "caption": "request failed",
+            }
+        )
+    else:
+        st.session_state.chat_session_id = payload["session_id"]
+        caption_parts = [
+            f"route={payload['route_kind']}",
+            f"effective_question={payload['effective_question']}",
+        ]
+        if payload.get("recipient_email"):
+            caption_parts.append(f"recipient={payload['recipient_email']}")
+        if payload.get("routing_reason"):
+            caption_parts.append(payload["routing_reason"])
+        st.session_state.chat_messages.append(
+            {
+                "role": "assistant",
+                "content": payload["assistant_message"],
+                "caption": " | ".join(caption_parts),
+            }
+        )
+        st.session_state.last_chat_payload = payload
+    st.rerun()
 
-    if st.button("Run Controlled Workflow", type="primary", use_container_width=True, key="agent_run"):
-        if not agent_instruction.strip() or not agent_question.strip():
-            st.error("Instruction and question are required.")
-        else:
-            try:
-                payload = run_agent_backend(
-                    backend_url=backend_url,
-                    instruction=agent_instruction.strip(),
-                    question=agent_question.strip(),
-                    recipient_email=agent_recipient.strip(),
-                    quality_mode=quality_mode,
-                    prompt_version=prompt_version,
-                    top_k=top_k,
-                    reranker_type=reranker_type,
-                )
-            except error.HTTPError as exc:
-                detail = exc.read().decode("utf-8", errors="ignore")
-                st.error(f"Backend returned HTTP {exc.code}: {detail}")
-            except Exception as exc:  # pragma: no cover - UI fallback
-                st.error(f"Request failed: {exc}")
-            else:
-                render_agent_result(payload)
+if st.session_state.chat_session_id:
+    st.caption(f"Session: {st.session_state.chat_session_id}")
+
+latest_payload = st.session_state.last_chat_payload
+if latest_payload:
+    st.divider()
+    st.subheader("Latest Runtime Details")
+    st.caption(
+        "The chat interface routes each turn into one execution path and keeps the full structured result for the latest turn."
+    )
+    if latest_payload["route_kind"] == "qa" and latest_payload.get("qa_result"):
+        render_qa_result({"result": latest_payload["qa_result"]})
+    elif latest_payload["route_kind"] == "agent" and latest_payload.get("agent_result"):
+        render_agent_result({"result": latest_payload["agent_result"]})

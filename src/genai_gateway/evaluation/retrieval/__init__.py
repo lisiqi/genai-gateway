@@ -9,6 +9,7 @@ from genai_gateway.evaluation.retrieval.generation import (
     RelevanceJudge,
     build_evaluation_dataset,
     pool_relevant_chunks,
+    resolve_pool_lexical_backends,
 )
 from genai_gateway.evaluation.retrieval.harness import (
     RetrievalEvaluationReport,
@@ -29,4 +30,5 @@ __all__ = [
     "RetrievalEvaluationRunner",
     "build_evaluation_dataset",
     "pool_relevant_chunks",
+    "resolve_pool_lexical_backends",
 ]

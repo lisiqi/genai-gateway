@@ -63,7 +63,7 @@ Lexical mode uses Postgres full-text search over chunk content.
 The query shape is conceptually:
 
 - `to_tsvector('english', content)`
-- `websearch_to_tsquery('english', question)`
+- `to_tsquery('english', query_text)`
 - `ts_rank_cd(...)`
 
 This is term-based retrieval.
@@ -173,6 +173,88 @@ That choice is pragmatic:
 This is not a claim that Postgres FTS is equivalent to a dedicated BM25 system.
 
 It is simply the right first lexical retriever for this project.
+
+> **Update:** the lexical leg can now use true BM25 without leaving Postgres, via
+> the ParadeDB `pg_search` extension (`RETRIEVAL_LEXICAL_BACKEND=bm25`). This keeps
+> the single-datastore value above while replacing `ts_rank_cd` with standardized
+> BM25 scoring. Defaults are two-level: the **code default is `fts`** (so the app
+> runs on any Postgres — the portability fallback, since managed Postgres lacks
+> `pg_search`), while the **shipped stack defaults to `bm25`** via `.env` because
+> the bundled compose provides `pg_search`. FTS also stays as one arm of the
+> `fts`-vs-`bm25` evaluation. See
+> [ADR 014](../adr/014-postgres-native-bm25-lexical-retrieval.md).
+
+## How Postgres Full-Text Search Works
+
+The `fts` backend is Postgres' built-in text search. It has four moving parts.
+
+### 1. `to_tsvector('english', content)` — indexing text
+
+`to_tsvector` turns a chunk's raw text into a **`tsvector`**: a sorted list of normalized *lexemes* with their positions. The `'english'` configuration:
+
+- lowercases and tokenizes the text
+- removes stop words (`the`, `of`, `and`, …)
+- **stems** words to a root form, so `obligations`, `obligation`, and `obligated` all collapse to the same lexeme
+
+```text
+"Providers shall assess systemic risks"
+  → 'assess':3 'provid':1 'risk':5 'system':4   (a tsvector)
+```
+
+### 2. `to_tsquery('english', query_text)` — parsing the query
+
+`to_tsquery` parses the query into a **`tsquery`**: lexemes combined with boolean operators — `&` (AND), `|` (OR), `!` (NOT), `<->` (followed by). The same `'english'` normalization/stemming is applied, so query terms match indexed terms. This project's lexical query builder emits OR-joined terms (`obligations | providers`), which `to_tsquery` reads as "match any of these lexemes."
+
+### 3. `@@` — the match operator
+
+`tsvector @@ tsquery` is the boolean test: does this chunk contain lexemes satisfying the query? It answers **yes/no**, not "how relevant." It is what filters the candidate chunks.
+
+### 4. `ts_rank_cd(...)` — ranking the matches
+
+Among the chunks that matched, `ts_rank_cd` assigns a **cover-density** rank based on:
+
+- how many of the query lexemes appear
+- how **close together** they appear (proximity)
+- their positions in the text
+
+Higher = more/closer query-term coverage.
+
+### Why this is *not* BM25
+
+`ts_rank_cd` ranks by **term presence and proximity**. It does **not** model corpus-wide inverse document frequency, term-frequency saturation, or document-length normalization the way BM25 does (see below). It is a solid lexical match + proximity ranker — good enough to validate hybrid retrieval — but it is Postgres-specific ranking, not the standardized probabilistic relevance model BM25 provides. That gap is the whole reason for the `bm25` backend (ADR 014).
+
+A **GIN index** on `to_tsvector('english', content)` (migration `20260326_000008`) makes the `@@` match index-backed instead of a full scan.
+
+## How BM25 Scores (And Why It Is Not Just TF-IDF)
+
+BM25 is in the **same family** as TF-IDF — it is built from term frequency (TF) and inverse document frequency (IDF) — so the intuition "rarer terms matter more, repeated terms matter more" carries over. But BM25 is a *probabilistic* ranking function that fixes two weaknesses of plain TF-IDF.
+
+For a query with terms `q₁…qₙ` scored against a chunk `D`:
+
+```text
+score(D) = Σ IDF(qᵢ) ·  f(qᵢ, D) · (k₁ + 1)
+                        ─────────────────────────────────────
+                        f(qᵢ, D) + k₁ · (1 − b + b · |D| / avgdl)
+```
+
+- `f(qᵢ, D)` — how many times term `qᵢ` appears in the chunk (the TF part)
+- `IDF(qᵢ)` — down-weights terms common across the corpus (the IDF part; "the" ≈ 0, "trusted flagger" ≈ high)
+- `|D|` / `avgdl` — this chunk's length vs the average chunk length
+- `k₁` (~1.2–2.0), `b` (~0.75) — tuning constants
+
+### Difference 1: term-frequency saturation (`k₁`)
+
+Plain TF-IDF is **linear** in term frequency — a term appearing 20 times scores ~20× a term appearing once. BM25's fraction **saturates**: going from 1 → 2 occurrences helps a lot, but 19 → 20 barely moves the score. This stops keyword-stuffed or repetitive text from dominating just by repetition.
+
+### Difference 2: document-length normalization (`b`)
+
+Longer documents naturally contain more term occurrences, so plain TF-IDF tends to favor long documents. The `b · |D| / avgdl` term normalizes by length, so a **short, focused chunk is not unfairly beaten by a long one**. This matters directly here: legal retrieval prefers precise clause-level chunks, and length normalization keeps a tight clause competitive against a whole long article.
+
+So: TF-IDF is the ancestor; BM25 keeps its IDF weighting but replaces raw TF with a saturating, length-normalized term. That is the score `paradedb.score(id)` returns.
+
+### In this system
+
+`paradedb.score(id)` (ParadeDB `pg_search`) computes the BM25 score, used to order the lexical results. In **hybrid** mode the raw BM25 value is not compared against dense cosine scores directly — reciprocal rank fusion only uses each result's **rank position**, so BM25 here is really producing the correct *ordering* of the lexical candidates before fusion. BM25 is the standardized replacement for the earlier `ts_rank_cd` Postgres ranking.
 
 ## Relationship To Reranking
 

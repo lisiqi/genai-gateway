@@ -68,6 +68,8 @@ Lexical retrieval uses Postgres full-text search over chunk content:
 
 This keeps the lexical retriever inside the existing Postgres stack instead of introducing a second search service.
 
+> **Superseded by [ADR 014](014-postgres-native-bm25-lexical-retrieval.md).** The lexical leg can now use true BM25 via the ParadeDB `pg_search` extension, selected with `RETRIEVAL_LEXICAL_BACKEND=bm25`. The Postgres FTS path described here remains the default (`fts`) and the fallback for environments without `pg_search`. Dense retrieval and RRF fusion in this ADR are unchanged.
+
 ### Fusion
 
 Hybrid retrieval merges dense and lexical rankings with reciprocal rank fusion.

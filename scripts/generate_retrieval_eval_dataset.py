@@ -22,6 +22,7 @@ from genai_gateway.evaluation.retrieval import (
     RelevanceJudge,
     build_evaluation_dataset,
     pool_relevant_chunks,
+    resolve_pool_lexical_backends,
 )
 from genai_gateway.providers.chat import get_chat_provider
 from genai_gateway.retrieval.retriever import RetrievalService
@@ -120,6 +121,15 @@ def build_parser() -> argparse.ArgumentParser:
         default=["dense", "lexical"],
         help="Retrieval modes unioned into the candidate pool (default: dense lexical).",
     )
+    parser.add_argument(
+        "--pool-lexical-backend",
+        choices=["bm25", "fts", "mixed"],
+        default="bm25",
+        help=(
+            "Lexical backend used for the pool's lexical leg: bm25, fts, or mixed "
+            "(pool both, reducing single-system bias). Default: bm25."
+        ),
+    )
     return parser
 
 
@@ -209,6 +219,7 @@ def main() -> None:
         )
         judge_provider = args.judge_provider or judge_routing.provider
         judge_model = args.judge_model or judge_routing.model
+        pool_lexical_backends = resolve_pool_lexical_backends(args.pool_lexical_backend)
         judge = RelevanceJudge(
             chat_provider=get_chat_provider(provider_name=judge_provider, model_name=judge_model),
             provider_name=judge_provider,
@@ -216,11 +227,13 @@ def main() -> None:
             retrieval_service=RetrievalService(),
             pool_top_k=args.pool_top_k,
             pool_retrieval_modes=args.pool_retrieval_modes,
+            pool_lexical_backends=pool_lexical_backends,
         )
         print(
             "[2b/3] Pooling relevance judgments with "
             f"provider={judge_provider} model={judge_model} "
-            f"pool_top_k={args.pool_top_k} modes={args.pool_retrieval_modes}...",
+            f"pool_top_k={args.pool_top_k} modes={args.pool_retrieval_modes} "
+            f"lexical_backends={pool_lexical_backends}...",
             flush=True,
         )
         pooling_started_at = perf_counter()

@@ -1,6 +1,10 @@
 services:
   postgres:
-    image: pgvector/pgvector:pg16
+    # ParadeDB bundles pg_search (BM25) + pgvector (ADR 014). Pinned to a
+    # PostgreSQL 16 tag so the data-dir layout matches the volume mount below
+    # (`latest` tracks PG18, which changed the mount point). The pg_search API
+    # is version-sensitive, so keep this tag and search SQL in sync.
+    image: paradedb/paradedb:0.24.1-pg16
     environment:
       POSTGRES_DB: genai_gateway
       POSTGRES_USER: postgres

@@ -35,3 +35,28 @@ class TestEvaluationDatasetReviewHelpers:
         filtered = dataset.filtered(review_statuses={"approved"})
         assert len(filtered.samples) == 1
         assert filtered.samples[0].question == "Q1"
+
+    def test_exclude_statuses_drops_rejected_on_unfiltered_run(self) -> None:
+        dataset = EvaluationDataset(
+            samples=[
+                EvaluationSample(question="Q1", relevant_chunk_ids=["c1"], metadata={"review_status": "approved"}),
+                EvaluationSample(question="Q2", relevant_chunk_ids=["c2"], metadata={"review_status": "rejected"}),
+                EvaluationSample(question="Q3", relevant_chunk_ids=["c3"]),  # unreviewed
+            ]
+        )
+
+        # No inclusion filter: keep everything except rejected.
+        kept = dataset.filtered(exclude_statuses={"rejected"})
+        assert {sample.question for sample in kept.samples} == {"Q1", "Q3"}
+
+    def test_exclude_statuses_composes_with_inclusion_filter(self) -> None:
+        dataset = EvaluationDataset(
+            samples=[
+                EvaluationSample(question="Q1", relevant_chunk_ids=["c1"], metadata={"review_status": "approved"}),
+                EvaluationSample(question="Q2", relevant_chunk_ids=["c2"], metadata={"review_status": "rejected"}),
+            ]
+        )
+
+        # Inclusion allow-list applied first, then rejected dropped (redundant here, but safe).
+        kept = dataset.filtered(review_statuses={"approved", "rejected"}, exclude_statuses={"rejected"})
+        assert {sample.question for sample in kept.samples} == {"Q1"}

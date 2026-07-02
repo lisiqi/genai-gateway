@@ -34,6 +34,7 @@ class SupportsRetrieve(Protocol):
         task: str,
         top_k: int | None = None,
         retrieval_mode: str | None = None,
+        lexical_backend: str | None = None,
     ) -> list[dict]:
         """Return candidate chunks for a question."""
 
@@ -248,21 +249,23 @@ def _build_location_label(*, article_number: Any, clause_numbers: list[Any]) -> 
 
 
 def _build_llm_prompt(chunk: CorpusChunk) -> str:
-    """Create the prompt used to ask an LLM for a benchmark sample."""
-    article_number = chunk.metadata.get("article_number")
-    clause_numbers = chunk.metadata.get("clause_number") or []
-    article_title = chunk.metadata.get("article_title")
-    location = _build_location_label(article_number=article_number, clause_numbers=clause_numbers)
+    """Create the prompt used to ask an LLM for a benchmark sample.
+
+    The article/clause identifiers are deliberately NOT injected into the prompt:
+    they are the ground-truth label, not prompt input. Feeding them in (and not
+    asking the model to paraphrase) makes generated questions echo the chunk's
+    exact wording, which biases the benchmark toward lexical/BM25 retrieval.
+    """
     return (
         "You are generating an offline retrieval-evaluation sample for a legal RAG benchmark.\n"
         "Given one chunk of legal text, produce exactly one natural user question that is primarily answered by this chunk.\n"
+        "Ask it the way a real user would, in natural language.\n"
+        "Do NOT quote exact phrases, article numbers, or section headings from the text — "
+        "the question should be answerable by meaning, not by copying wording.\n"
         "Also produce a concise gold answer grounded only in the chunk.\n"
         "Return strict JSON with keys `question` and `gold_answer`.\n"
         "Do not include markdown fences or any extra commentary.\n\n"
         f"Document title: {chunk.title or 'unknown'}\n"
-        f"Location: {location or 'unknown'}\n"
-        f"Article title: {article_title or 'unknown'}\n"
-        f"Chunk id: {chunk.chunk_id}\n"
         "Chunk content:\n"
         f"{chunk.content}\n"
     )
@@ -322,6 +325,7 @@ class RelevanceJudge:
         retrieval_service: SupportsRetrieve,
         pool_top_k: int = 10,
         pool_retrieval_modes: list[str] | None = None,
+        pool_lexical_backends: list[str] | None = None,
     ) -> None:
         self.chat_provider = chat_provider
         self.provider_name = provider_name
@@ -329,6 +333,9 @@ class RelevanceJudge:
         self.retrieval_service = retrieval_service
         self.pool_top_k = pool_top_k
         self.pool_retrieval_modes = pool_retrieval_modes or ["dense", "lexical"]
+        # Which lexical backend(s) contribute to the pool when a "lexical" mode is
+        # used. `["fts", "bm25"]` ("mixed") reduces single-system pooling bias.
+        self.pool_lexical_backends = pool_lexical_backends or ["bm25"]
 
     def expand_sample(self, sample: EvaluationSample, *, task: str) -> PoolingResult:
         """Judge pooled candidates and extend `relevant_chunk_ids` in place."""
@@ -361,18 +368,28 @@ class RelevanceJudge:
         return _parse_yes_no(raw_response)
 
     def _pool_candidates(self, *, question: str, task: str) -> list[dict]:
-        """Union candidate chunks across the configured retrieval modes."""
+        """Union candidate chunks across the configured retrieval modes.
+
+        For a `lexical` mode, one retrieval is issued per configured lexical
+        backend (e.g. `fts` and `bm25` for "mixed"), so the candidate pool is not
+        tied to whichever backend happens to be set in the environment.
+        """
         pooled: dict[str, dict] = {}
         for mode in self.pool_retrieval_modes:
-            for chunk in self.retrieval_service.retrieve(
-                question=question,
-                task=task,
-                top_k=self.pool_top_k,
-                retrieval_mode=mode,
-            ):
-                chunk_id = chunk.get("chunk_id")
-                if chunk_id and chunk_id not in pooled:
-                    pooled[chunk_id] = chunk
+            backends: list[str | None] = (
+                list(self.pool_lexical_backends) if mode == "lexical" else [None]
+            )
+            for backend in backends:
+                for chunk in self.retrieval_service.retrieve(
+                    question=question,
+                    task=task,
+                    top_k=self.pool_top_k,
+                    retrieval_mode=mode,
+                    lexical_backend=backend,
+                ):
+                    chunk_id = chunk.get("chunk_id")
+                    if chunk_id and chunk_id not in pooled:
+                        pooled[chunk_id] = chunk
         return list(pooled.values())
 
 
@@ -396,12 +413,23 @@ def pool_relevant_chunks(
             "judge_model": judge.model_name,
             "pool_top_k": judge.pool_top_k,
             "pool_retrieval_modes": list(judge.pool_retrieval_modes),
+            "pool_lexical_backends": list(judge.pool_lexical_backends),
             "candidates_judged": result.candidates_judged,
             "judged_relevant": result.judged_relevant,
         }
         if progress_callback is not None:
             progress_callback(index, total, sample)
     return dataset
+
+
+def resolve_pool_lexical_backends(choice: str) -> list[str]:
+    """Map a `bm25 | fts | mixed` choice to the lexical backends to pool."""
+    normalized = choice.strip().lower()
+    if normalized == "mixed":
+        return ["fts", "bm25"]
+    if normalized in {"fts", "bm25"}:
+        return [normalized]
+    raise ValueError("pool lexical backend must be one of: bm25, fts, mixed.")
 
 
 def _build_judge_prompt(*, question: str, chunk_content: str) -> str:

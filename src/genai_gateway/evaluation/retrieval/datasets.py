@@ -71,13 +71,23 @@ class EvaluationDataset:
             counts[status] = counts.get(status, 0) + 1
         return counts
 
-    def filtered(self, *, review_statuses: set[str] | None = None) -> "EvaluationDataset":
-        """Return a filtered copy of the dataset by review status."""
-        if review_statuses is None:
-            return EvaluationDataset(samples=list(self.samples))
-        return EvaluationDataset(
-            samples=[sample for sample in self.samples if sample.review_status in review_statuses]
-        )
+    def filtered(
+        self,
+        *,
+        review_statuses: set[str] | None = None,
+        exclude_statuses: set[str] | None = None,
+    ) -> "EvaluationDataset":
+        """Return a filtered copy of the dataset by review status.
+
+        `review_statuses` is an inclusion allow-list (keep only these statuses).
+        `exclude_statuses` is a deny-list applied afterwards (drop these statuses).
+        """
+        samples = list(self.samples)
+        if review_statuses is not None:
+            samples = [sample for sample in samples if sample.review_status in review_statuses]
+        if exclude_statuses:
+            samples = [sample for sample in samples if sample.review_status not in exclude_statuses]
+        return EvaluationDataset(samples=samples)
 
     def save(self, path: str) -> None:
         target = Path(path)
